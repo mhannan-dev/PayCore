@@ -1,0 +1,30 @@
+# Hot reload for the API: rebuilds and restarts ./cmd/server when Go or SQL files change.
+# Run from api/: `go tool air` (if Air is pinned in go.mod) or `air` (global install).
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/paycore-api.exe ./cmd/server"
+  entrypoint = ["./tmp/paycore-api.exe"]
+  # .sql: migrations are embedded in the binary, so a new migration needs a rebuild too.
+  include_ext = ["go", "sql"]
+  exclude_dir = ["tmp", "bin", "uploads", "vendor"]
+  exclude_regex = ["_test\\.go$"]
+  # Wait for editors to finish saving several files before rebuilding.
+  delay = 500
+  # A broken build keeps the last good server running instead of stopping it.
+  stop_on_error = false
+  # Windows cannot deliver SIGINT to the child; give it a moment to release the port.
+  send_interrupt = false
+  kill_delay = "500ms"
+  log = "build-errors.log"
+
+[log]
+  time = false
+  main_only = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
