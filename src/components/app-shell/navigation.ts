@@ -1,0 +1,18 @@
+export type NavItem = { href: string; label: string; icon: string; section?: "admin" };
+
+export const NAVIGATION: NavItem[] = [
+  { href: "/", label: "Overview", icon: "grid" },
+  { href: "/accounts", label: "Accounts", icon: "wallet" },
+  { href: "/transfers", label: "Transfer studio", icon: "arrows" },
+  { href: "/ledger", label: "Ledger explorer", icon: "book" },
+  { href: "/audit", label: "Invariant audit", icon: "shield" },
+  { href: "/reports", label: "Reports", icon: "chart" },
+  { href: "/notifications", label: "Notifications", icon: "bell" },
+  { href: "/settlements", label: "Settlements", icon: "bank" },
+  { href: "/simulator", label: "Request simulator", icon: "code" },
+  { href: "/profile", label: "User profile", icon: "user" },
+  { href: "/admin/users", label: "Users & access", icon: "users", section: "admin" },
+  { href: "/admin/roles", label: "Roles & permissions", icon: "key", section: "admin" },
+];
+
+export const pageLabel = (pathname: string) => NAVIGATION.find((item) => item.href === pathname)?.label ?? "Page";

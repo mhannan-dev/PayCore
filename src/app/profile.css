@@ -1,0 +1,154 @@
+/* ==========================================================================
+   User avatar (shared: sidebar, top bar, profile)
+   UserAvatar renders initials or an <img class="avatar-photo"> inside a sized container.
+   ========================================================================== */
+.operator-avatar,
+.profile-avatar,
+.pf-avatar { position: relative; overflow: hidden; }
+.avatar-photo { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+
+/* ==========================================================================
+   Profile page (/profile) — classes prefixed pf-
+   ========================================================================== */
+.pf-page { display: flex; flex-direction: column; gap: 24px; }
+.pf-muted { font-size: 11px; color: var(--muted); }
+
+/* --- Header card ---------------------------------------------------------- */
+.pf-hero { position: relative; }
+.pf-cover {
+  height: 112px;
+  background:
+    radial-gradient(circle at 18% 120%, rgba(201, 246, 161, 0.55), transparent 55%),
+    radial-gradient(circle at 85% -20%, rgba(88, 135, 82, 0.35), transparent 60%),
+    linear-gradient(120deg, #1a4a35 0%, #245f43 55%, #3d6b2f 100%);
+}
+.pf-hero-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+  padding: 0 28px 24px;
+  margin-top: -52px;
+}
+
+.pf-avatar-wrap { position: relative; width: 112px; height: 112px; flex-shrink: 0; }
+.pf-avatar {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e7efda;
+  color: #477142;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  border: 4px solid #fff;
+  box-shadow: 0 6px 18px rgba(18, 45, 35, 0.18);
+}
+.pf-avatar.is-busy .avatar-photo { opacity: 0.4; }
+.pf-avatar-spinner { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(245, 248, 239, 0.6); }
+.pf-camera {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #245f43;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(18, 45, 35, 0.25);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.pf-camera:hover { background: #1a4a35; transform: scale(1.06); }
+.pf-camera:focus-visible { outline: 2px solid #c9f6a1; outline-offset: 2px; }
+.pf-camera:disabled { opacity: 0.6; cursor: progress; transform: none; }
+
+.pf-identity { min-width: 0; padding-bottom: 4px; }
+.pf-identity h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; color: #1a382b; margin: 0 0 6px; overflow-wrap: anywhere; }
+.pf-email { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 0 12px; overflow-wrap: anywhere; }
+.pf-email svg { flex-shrink: 0; }
+
+.pf-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.pf-chip { font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #edf5e6; color: #2d5e3a; border: 1px solid #d6e6cc; }
+.pf-chip.is-admin { background: #fdf3e2; color: #8d641c; border-color: #f0dfbd; }
+
+/* padding-top keeps the buttons below the cover band (.pf-hero-body overlaps it by 52px). */
+.pf-hero-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 64px; padding-bottom: 4px; }
+.pf-action-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pf-btn { min-height: 36px; padding: 8px 14px; gap: 7px; }
+.pf-btn-danger { background: #fff; color: #ad463a; border-color: #f0d4cf; }
+.pf-btn-danger:hover:not(:disabled) { background: #fff1ec; }
+.pf-btn:disabled { opacity: 0.6; cursor: progress; }
+.pf-hint { font-size: 10px; color: #8b9d88; }
+
+/* --- Cards below ----------------------------------------------------------- */
+.pf-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 24px; align-items: start; }
+
+.pf-form { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.pf-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pf-field { display: flex; flex-direction: column; gap: 8px; font-size: 11px; font-weight: 600; color: #314d3a; }
+.pf-field > span { display: flex; align-items: baseline; gap: 6px; }
+.pf-field em { color: #ad463a; font-style: normal; }
+.pf-field small { font-weight: 400; color: #8b9d88; }
+.pf-field input[aria-invalid="true"] { border-color: #d98e83; }
+.pf-readonly {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px dashed #dce4d7;
+  border-radius: 7px;
+  background: #f8faf5;
+  color: #5d7160;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.pf-readonly svg { flex-shrink: 0; color: #8b9d88; }
+.pf-help { font-size: 10px; font-weight: 400; color: #8b9d88; }
+
+.pf-form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 4px -24px -24px;
+  padding: 16px 24px;
+  border-top: 1px solid #eef1eb;
+  background: #fbfcf9;
+}
+.pf-form-actions { display: flex; gap: 10px; }
+.pf-form-actions .button { min-height: 38px; padding: 9px 16px; }
+.pf-form-actions .button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.pf-rows { padding: 8px 23px; }
+.pf-row { display: flex; gap: 14px; padding: 15px 0; border-bottom: 1px solid #eef1eb; }
+.pf-row:last-child { border-bottom: none; }
+.pf-row-icon { width: 32px; height: 32px; border-radius: 8px; background: #f1f6ec; color: #477142; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pf-row-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.pf-row-label { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #8b9d88; }
+.pf-row-value { font-size: 12px; color: #203e2c; font-weight: 500; }
+
+/* --- Responsive ---------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .pf-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .pf-hero-body { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 0 20px 22px; gap: 14px; }
+  .pf-email, .pf-chips { justify-content: center; }
+  .pf-hero-actions { align-items: center; padding-top: 8px; }
+  .pf-action-row { justify-content: center; }
+  .pf-field-grid { grid-template-columns: 1fr; }
+  .pf-form-footer { flex-direction: column-reverse; align-items: stretch; text-align: center; }
+  .pf-form-actions { justify-content: stretch; }
+  .pf-form-actions .button { flex: 1; }
+}
+.pf-perms { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.pf-perms code { display: inline-block; font-size: 10px; padding: 3px 7px; border-radius: 5px; background: #f8faf5; border: 1px solid #e1e8dc; color: #3d5c44; }

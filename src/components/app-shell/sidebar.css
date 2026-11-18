@@ -1,0 +1,24 @@
+/* Desktop compact navigation; mobile retains the workspace menu. */
+.topbar-start { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 34px; height: 34px; padding: 0; border: 1px solid #e0e7df; border-radius: 7px; background: #fff; color: #607568; cursor: pointer; }
+.sidebar-toggle:hover { background: #f1f5ee; color: #245f43; border-color: #cbd9c7; }
+.nav-link svg { flex-shrink: 0; }
+@media (min-width: 701px) {
+  .sidebar { transition: width 180ms ease, padding 180ms ease; }
+  .main-shell { transition: margin-left 180ms ease; }
+  .app-shell.sidebar-collapsed .sidebar { width: 76px; padding-left: 10px; padding-right: 10px; }
+  .app-shell.sidebar-collapsed .main-shell { margin-left: 76px; }
+  .sidebar-collapsed .brand { justify-content: center; padding: 0; }
+  .sidebar-collapsed .brand-name, .sidebar-collapsed .brand-tag, .sidebar-collapsed .workspace-details, .sidebar-collapsed .menu-symbol, .sidebar-collapsed .nav-label, .sidebar-collapsed .nav-heading, .sidebar-collapsed .active-dot, .sidebar-collapsed .operator-details { display: none; }
+  .sidebar-collapsed .workspace-switch { justify-content: center; padding: 8px 0; }
+  .sidebar-collapsed .nav-link { justify-content: center; padding: 13px 0; }
+  .sidebar-collapsed .sidebar-footer { padding: 24px 0 0; }
+  .sidebar-collapsed .operator { justify-content: center; }
+}
+@media (max-width: 700px) { .sidebar-toggle { display: none; } .topbar-start { gap: 0; } }
+@media (prefers-reduced-motion: reduce) { .sidebar, .main-shell { transition: none; } }
+
+.nav-heading-section { margin-top: 18px; }
+/* Top bar stays visible while the page scrolls; below dialogs, toasts and the preloader. */
+.topbar { position: sticky; top: 0; z-index: 40; background: rgba(255, 255, 255, 0.92); backdrop-filter: saturate(1.4) blur(8px); -webkit-backdrop-filter: saturate(1.4) blur(8px); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .topbar { background: #fff; } }

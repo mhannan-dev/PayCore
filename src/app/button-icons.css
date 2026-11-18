@@ -1,0 +1,4 @@
+button > svg { flex-shrink: 0; }
+button.text-link, button.captcha-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.role-pill-name { display: inline-flex; align-items: center; gap: 6px; }
+.row-button { display: inline-flex; align-items: center; justify-content: center; }

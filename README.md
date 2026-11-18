@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PayCore Web
 
-## Getting Started
+The PayCore operations console: a Next.js 16 App Router app (React 19, strict TypeScript, Tailwind CSS 4). For the whole project, setup and configuration, see the [root README](../README.md).
 
-First, run the development server:
+Sign-in, roles, user management, invitations, password reset and profiles call the real Go API. **Business screens (Accounts, Transfers, Ledger, Audit, Reports, Notifications, Settlements, Simulator) still use shared, balanced sample data** until the ledger core API exists; they send no financial commands.
 
-```bash
+## Run
+
+From the repository root, `.\run.ps1` starts the database, API and web together and passes the right API URL. To run only the web against an API that is already running:
+
+```powershell
+cd web
+Copy-Item .env.example .env.local   # set NEXT_PUBLIC_API_URL if the API is not on :8080
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Pages
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Route | Content | Access |
+| --- | --- | --- |
+| `/login` | Email, password and math CAPTCHA sign-in; demo identity quick-fill in development | public |
+| `/forgot-password`, `/reset-password` | Request a reset link; choose a new password from the emailed link | public |
+| `/set-password` | Accept an invitation and choose a password | public |
+| `/` | Overview, sample activity chart, balanced journal summary | signed in |
+| `/accounts` | Accounts and posting history (sample) | `ledger:read` |
+| `/transfers` | Transfer validation and request preview (sample) | `transfers:read` |
+| `/ledger` | Journals with expandable postings (sample) | `ledger:read` |
+| `/audit` | Zero-sum invariant check (sample) | `audit:read` |
+| `/reports` | Balance summary and CSV export (sample) | `reports:read` |
+| `/notifications`, `/settlements` | Delivery records; payout lifecycle (sample) | signed in |
+| `/simulator` | Idempotency replay demonstration (in memory) | `simulator:run` |
+| `/profile` | Name, profile photo, roles and permissions | signed in |
+| `/admin/users` | Users & access: search, paging, invite, edit roles, delete | `users:read` (changes need `users:write`) |
+| `/admin/roles` | Roles & permissions matrix | `users:read` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Page access is decided by `ROUTE_PERMISSIONS` in `src/lib/rbac.ts`; it controls what is shown, while the API enforces permissions.
 
-## Learn More
+## Source layout
 
-To learn more about Next.js, take a look at the following resources:
+- `src/app/**/page.tsx`: routes and metadata (rendered statically).
+- `src/components/`: UI, grouped by area (`app-shell/`, `admin/`, `login/`, `set-password/`, `user-profile/`, `workspace/`, `ui/`).
+- `src/lib/auth-api.ts`: typed API client; the TypeScript mirror of the Go API contract.
+- `src/lib/auth-session.ts`: browser session store (token and user, refreshed from `/auth/me`).
+- `src/lib/rbac.ts`: permission codes and route permissions.
+- `src/lib/demo-data.ts`: sample ledger fixtures with `bigint` balance helpers.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```powershell
+npm run check   # tsc --noEmit + type-aware ESLint (see ../docs/coding_rules.md)
+npm run build
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Typography uses local system fonts so builds do not depend on Google Fonts access.
