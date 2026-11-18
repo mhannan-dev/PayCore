@@ -32,6 +32,9 @@ api/build-errors.log
 *.test
 *.out
 coverage.txt
+coverage.html
+*.coverprofile
+__debug_bin*
 go.work
 go.work.sum
 
@@ -47,6 +50,10 @@ web/next-env.d.ts
 *.tsbuildinfo
 .vercel/
 .turbo/
+.swc/
+web/test-results/
+web/playwright-report/
+web/blob-report/
 .pnp
 .pnp.*
 .yarn/*
@@ -54,6 +61,21 @@ web/next-env.d.ts
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# ---------------------------------------------------------------------------
+# Local data, dumps and overrides
+# ---------------------------------------------------------------------------
+compose.override.yaml
+compose.override.yml
+docker-compose.override.yml
+*.dump
+*.sql.gz
+*.backup
+*.sqlite
+*.sqlite3
+*.db
+dump.rdb
+backups/
 
 # ---------------------------------------------------------------------------
 # Logs and runtime files
@@ -64,7 +86,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.pid
-*.seed
 
 # ---------------------------------------------------------------------------
 # IDE and editor files
