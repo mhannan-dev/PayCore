@@ -1,0 +1,38 @@
+# golangci-lint v2 — type-safety and correctness rules (see ../docs/coding_rules.md).
+# Install once:  go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest  (pin a v2.x tag in CI)
+# Run:           cd api; golangci-lint run
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - forcetypeassert # x.(T) must use the two-value form
+    - exhaustive # switches over enum-like constants cover every value
+    - errorlint # errors.Is / errors.As instead of == and type assertions on errors
+    - errchkjson # json.Marshal/Encode errors are checked
+    - musttag # structs passed to json.Marshal/Unmarshal have json tags
+    - rowserrcheck # rows.Err() is checked
+    - sqlclosecheck # rows/statements are closed
+    - bodyclose # HTTP response bodies are closed
+    - noctx # outgoing I/O takes a context
+    - nilnil # no (nil, nil) returns: return a sentinel error instead
+    - gosec # security-sensitive patterns (SQL string building, weak crypto, file perms)
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # struct field order is chosen for readability
+        - shadow # `err` shadowing in nested scopes is idiomatic here
+    gosec:
+      excludes:
+        - G104 # duplicate of errcheck
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [forcetypeassert, gosec, errchkjson]
+
+formatters:
+  enable:
+    - gofmt
