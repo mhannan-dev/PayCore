@@ -5,19 +5,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"paycore/api/internal/model"
 )
 
 var ErrInactiveUser = errors.New("inactive user")
-
-type AuthStore interface {
-	FindByEmail(context.Context, string) (model.User, error)
-	CreateSession(context.Context, string, []byte, time.Time) error
-	FindSession(context.Context, []byte) (model.User, error)
-	DeleteSession(context.Context, []byte) error
-	UpdateName(ctx context.Context, userID, firstName string, lastName *string) (model.User, error)
-}
 
 type UserRepository struct{ pool *pgxpool.Pool }
 
@@ -73,13 +67,30 @@ func (r *UserRepository) Create(ctx context.Context, firstName string, lastName 
 	}
 	return u, nil
 }
-func (r *UserRepository) CreateSession(ctx context.Context, userID string, hash []byte, expiry time.Time) error {
-	// A concurrent account disable cannot issue a usable new session.
-	tag, err := r.pool.Exec(ctx, "INSERT INTO auth_sessions (token_hash, user_id, expires_at) SELECT $1, id, $3 FROM users WHERE id = $2 AND is_active", hash, userID, expiry)
-	if err == nil && tag.RowsAffected() != 1 {
-		return ErrInactiveUser
+func (r *UserRepository) CreateSession(ctx context.Context, userID, expectedPasswordHash string, hash []byte, expiry time.Time) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
 	}
-	return err
+	defer tx.Rollback(ctx)
+	// Serialize with reset/deactivation. Reset either deletes this session after
+	// commit or changes the hash before this locked read.
+	var current string
+	var active bool
+	err = tx.QueryRow(ctx, "SELECT COALESCE(password_hash, ''), is_active FROM users WHERE id=$1 FOR UPDATE", userID).Scan(&current, &active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.ErrCredentialsChanged
+	}
+	if err != nil {
+		return err
+	}
+	if !active || current == "" || current != expectedPasswordHash {
+		return model.ErrCredentialsChanged
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES ($1,$2,$3)", hash, userID, expiry); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 func (r *UserRepository) FindSession(ctx context.Context, hash []byte) (model.User, error) {
 	return scanUser(r.pool.QueryRow(ctx, "SELECT "+userColumns+" FROM users u JOIN auth_sessions s ON s.user_id = u.id "+userPhotoJoin+" WHERE s.token_hash = $1 AND s.expires_at > NOW() AND u.is_active", hash))

@@ -25,7 +25,7 @@ export class AuthApiError extends Error {
   }
 }
 
-type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
+export type RequestOptions = RequestInit & { token?: string; timeoutMs?: number };
 
 /** Sends a request to /api/v1{path} and returns the raw Response, or throws AuthApiError. */
 async function send(path: string, { token, timeoutMs = 8000, ...init }: RequestOptions = {}): Promise<Response> {
@@ -79,7 +79,8 @@ async function toError(response: Response, path: string, method: string) {
   return new AuthApiError(response.status, data.error ?? "http_error", message);
 }
 
-async function request<T>(path: string, options?: RequestOptions): Promise<T> {
+/** Typed JSON request to /api/v1{path}; the API contract (coding rule 4) is asserted here. */
+export async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const response = await send(path, options);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -103,8 +104,9 @@ export function uploadAttachment(token: string, file: File) {
 export const deleteAttachment = (token: string, id: string) =>
   request<void>(`/attachments/${encodeURIComponent(id)}`, { method: "DELETE", token });
 /** Sets (id) or clears (null) the profile photo. */
+export type ProfilePhotoResult = { photo_attachment_id: string | null; photo: string | null };
 export const setProfilePhoto = (token: string, attachmentId: string | null) =>
-  request<{ photo_attachment_id: string | null; photo: string | null }>("/auth/photo", {
+  request<ProfilePhotoResult>("/auth/photo", {
     method: "PUT",
     body: JSON.stringify({ attachment_id: attachmentId }),
     token,
@@ -176,6 +178,40 @@ export const confirmPasswordReset = (resetToken: string, password: string) =>
 export const acceptInvitation = (inviteToken: string, password: string) =>
   request<{ email: string }>("/auth/invitations/accept", { method: "POST", body: JSON.stringify({ token: inviteToken, password }) });
 /** Permanently deletes a user (not yourself, and not the last active admin). */
+/** Deactivate (signs the user out everywhere; reversible) or reactivate an account. */
+export const setUserActive = (token: string, userId: string, active: boolean) =>
+  request<ManagedUser>(`/users/${encodeURIComponent(userId)}/${active ? "activate" : "deactivate"}`, { method: "POST", token });
+
+// --- Audit log ------------------------------------------------------------------
+/** Mirrors audit.Action in the API (api/internal/audit). */
+export const AUDIT_ACTIONS = [
+  "login_succeeded", "login_failed", "logout",
+  "user_invited", "invitation_resent", "invitation_accepted",
+  "roles_changed", "user_deactivated", "user_activated", "user_deleted",
+  "password_reset_requested", "password_reset_completed",
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+export type AuditEvent = {
+  id: number;
+  occurred_at: string;
+  action: AuditAction;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  target_user_id: string | null;
+  target_email: string | null;
+  details: { roles_before?: string[]; roles_after?: string[]; reason?: string };
+  ip: string | null;
+  user_agent: string | null;
+};
+export type AuditQuery = { action?: AuditAction | ""; q?: string; limit: number; offset: number };
+/** One page of the audit log, newest first (needs audit:read). */
+export function fetchAuditEvents(token: string, query: AuditQuery) {
+  const params = new URLSearchParams({ limit: String(query.limit), offset: String(query.offset) });
+  if (query.action) params.set("action", query.action);
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  return request<Page<AuditEvent>>(`/audit/events?${params}`, { token });
+}
+
 export const deleteUser = (token: string, userId: string) =>
   request<void>(`/users/${encodeURIComponent(userId)}`, { method: "DELETE", token });
 export const setUserRoles = (token: string, userId: string, roles: string[]) =>

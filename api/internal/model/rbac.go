@@ -30,6 +30,7 @@ const (
 	PermReportsExport    = "reports:export"
 	PermSimulatorRun     = "simulator:run"
 	PermSystemRead       = "system:read"
+	PermAccountsWrite    = "accounts:write"
 )
 
 // Role represents a system role definition.

@@ -74,7 +74,7 @@ var resetLink = regexp.MustCompile(`http://web\.test/reset-password#token=([0-9a
 func newResetService(captchaOK bool) (*PasswordResetService, *resetStore, *memSender) {
 	store := &resetStore{users: map[string]model.ResetUser{"rasel@example.test": {ID: "u1", Email: "rasel@example.test", FirstName: "Rasel"}}}
 	sender := &memSender{}
-	return NewPasswordResetService(store, okCaptcha{captchaOK}, sender, "http://web.test/"), store, sender
+	return NewPasswordResetService(store, okCaptcha{captchaOK}, NewMailOutbox(sender), "http://web.test/"), store, sender
 }
 
 func settle(svc *PasswordResetService) {
@@ -136,5 +136,18 @@ func TestPasswordResetNeedsCaptcha(t *testing.T) {
 	}
 	if store.tokens != nil {
 		t.Fatal("no token may be issued without a valid captcha")
+	}
+}
+
+func TestPasswordResetQueueSaturationDoesNotRevealAccount(t *testing.T) {
+	svc, _, sender := newResetService(true)
+	queue := NewMailOutbox(sender, MailOptions{Capacity: 1})
+	queue.pending <- struct{}{}
+	defer func() { <-queue.pending }()
+	svc.EmailQueue = queue
+	for _, email := range []string{"rasel@example.test", "unknown@example.test"} {
+		if err := svc.Request(context.Background(), model.PasswordResetRequest{Email: email}); err != nil {
+			t.Fatalf("queue saturation exposed account existence: %v", err)
+		}
 	}
 }

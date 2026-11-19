@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   reportsExport: "reports:export",
   simulatorRun: "simulator:run",
   systemRead: "system:read",
+  accountsWrite: "accounts:write",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -29,6 +30,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   "/simulator": PERMISSIONS.simulatorRun,
   "/admin/users": PERMISSIONS.usersRead,
   "/admin/roles": PERMISSIONS.usersRead,
+  "/admin/audit-log": PERMISSIONS.auditRead,
 };
 
 /**

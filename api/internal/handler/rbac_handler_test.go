@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/handler"
 	"paycore/api/internal/mailer"
 	"paycore/api/internal/model"
@@ -24,6 +25,7 @@ import (
 )
 
 type rbacStore struct {
+	lastActor audit.Actor
 	lastQuery model.UserQuery
 	users     map[string]model.ManagedUser
 	saved     []string
@@ -47,10 +49,23 @@ func (s *rbacStore) DeleteUser(_ context.Context, id string) error {
 		return s.lastErr
 	}
 	if _, ok := s.users[id]; !ok {
-		return pgx.ErrNoRows
+		return repository.ErrUserNotFound
 	}
 	delete(s.users, id)
 	return nil
+}
+func (s *rbacStore) SetUserActive(ctx context.Context, id string, active bool) (model.ManagedUser, error) {
+	s.lastActor, _ = audit.ActorFrom(ctx)
+	if s.lastErr != nil {
+		return model.ManagedUser{}, s.lastErr
+	}
+	u, ok := s.users[id]
+	if !ok {
+		return model.ManagedUser{}, repository.ErrUserNotFound
+	}
+	u.IsActive = active
+	s.users[id] = u
+	return u, nil
 }
 func (s *rbacStore) SetUserRoles(_ context.Context, id string, roles []string) (model.ManagedUser, error) {
 	if s.lastErr != nil {
@@ -58,7 +73,7 @@ func (s *rbacStore) SetUserRoles(_ context.Context, id string, roles []string) (
 	}
 	u, ok := s.users[id]
 	if !ok {
-		return model.ManagedUser{}, pgx.ErrNoRows
+		return model.ManagedUser{}, repository.ErrUserNotFound
 	}
 	s.saved = roles
 	u.Roles = roles
@@ -90,10 +105,16 @@ func rbacRouterWithInvites(t *testing.T, caller model.User) (*testRouter, *rbacS
 	}}
 	invites := &inviteStore{taken: map[string]bool{"member@example.test": true}}
 	mail := &captureMail{}
-	svc := service.NewInvitationService(invites, mail, "http://web.test/")
-	svc.RetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	svc := service.NewInvitationService(invites, service.NewMailOutbox(mail, service.MailOptions{RetryDelays: []time.Duration{time.Millisecond, time.Millisecond}}), "http://web.test/")
+
 	invites.svc = svc
-	r := server.SetupRouterWithAttachments(nil, handler.NewAuthHandler(auth, nil), nil, handler.NewRBACHandler(auth, repo, svc))
+	guard := handler.NewGuard(auth)
+	r := server.New(nil, server.Handlers{
+		Auth:        handler.NewAuthHandler(auth, nil),
+		Users:       handler.NewUsersHandler(service.NewUserAdminService(repo, svc), guard),
+		Invitations: handler.NewInvitationHandler(svc),
+		Audit:       handler.NewAuditHandler(&fakeAuditLog{}, guard),
+	})
 	return &testRouter{r}, repo, invites, mail, token
 }
 
@@ -218,7 +239,7 @@ func (s *inviteStore) ReissueInvitation(_ context.Context, id string, digest []b
 		return model.ManagedUser{}, repository.ErrAlreadyActivated
 	}
 	if id != memberID {
-		return model.ManagedUser{}, pgx.ErrNoRows
+		return model.ManagedUser{}, repository.ErrUserNotFound
 	}
 	s.tokens = map[string]string{hex.EncodeToString(digest): "member@example.test"}
 	return model.ManagedUser{ID: id, FirstName: "Member", Email: "member@example.test", InviteExpiresAt: &expires}, nil
@@ -447,5 +468,62 @@ func TestRBACUsersPaging(t *testing.T) {
 		if w := r.do(http.MethodGet, "/api/v1/users?"+bad, "", token); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: got %d", bad, w.Code)
 		}
+	}
+}
+
+type fakeAuditLog struct{ last repository.AuditQuery }
+
+func (f *fakeAuditLog) List(_ context.Context, q repository.AuditQuery) ([]audit.Event, int, error) {
+	f.last = q
+	return []audit.Event{{ID: 7, Action: audit.RolesChanged, TargetEmail: audit.Ptr("member@example.test"),
+		Details: audit.Details{RolesBefore: []string{"OPERATOR"}, RolesAfter: []string{"ADMIN"}}}}, 1, nil
+}
+
+func TestRBACDeactivateActivate(t *testing.T) {
+	r, repo, token := rbacRouter(t, adminCaller)
+	if w := r.do(http.MethodPost, "/api/v1/users/"+adminID+"/deactivate", "", token); w.Code != http.StatusConflict || errorCode(t, w) != "cannot_deactivate_self" {
+		t.Fatalf("self: %d %s", w.Code, w.Body)
+	}
+	w := r.do(http.MethodPost, "/api/v1/users/"+memberID+"/deactivate", "", token)
+	if w.Code != http.StatusOK || repo.users[memberID].IsActive {
+		t.Fatalf("deactivate: %d %s", w.Code, w.Body)
+	}
+	if repo.lastActor.ID != adminID || repo.lastActor.Email != "admin@example.test" {
+		t.Fatalf("audit actor not on the request context: %+v", repo.lastActor)
+	}
+	if w := r.do(http.MethodPost, "/api/v1/users/"+memberID+"/activate", "", token); w.Code != http.StatusOK || !repo.users[memberID].IsActive {
+		t.Fatalf("activate: %d %s", w.Code, w.Body)
+	}
+	if w := r.do(http.MethodPost, "/api/v1/users/33333333-3333-4333-8333-333333333333/deactivate", "", token); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown: %d", w.Code)
+	}
+	repo.lastErr = repository.ErrLastAdmin
+	if w := r.do(http.MethodPost, "/api/v1/users/"+memberID+"/deactivate", "", token); w.Code != http.StatusConflict || errorCode(t, w) != "last_admin" {
+		t.Fatalf("last admin: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestRBACDeactivateNeedsWrite(t *testing.T) {
+	r, repo, token := rbacRouter(t, model.User{ID: memberID, Roles: []string{"LEAD_OPERATOR"}, IsActive: true, Permissions: []string{model.PermUsersRead}})
+	if w := r.do(http.MethodPost, "/api/v1/users/"+adminID+"/deactivate", "", token); w.Code != http.StatusForbidden || !repo.users[adminID].IsActive {
+		t.Fatalf("users:read must not deactivate: %d", w.Code)
+	}
+}
+
+func TestAuditEventsEndpoint(t *testing.T) {
+	auditor := model.User{ID: memberID, Email: "auditor@example.test", Roles: []string{"COMPLIANCE_AUDITOR"}, IsActive: true, Permissions: []string{model.PermAuditRead}}
+	r, _, token := rbacRouter(t, auditor)
+	w := r.do(http.MethodGet, "/api/v1/audit/events?action=roles_changed&q=member&limit=10&offset=20", "", token)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"roles_before":["OPERATOR"]`) || !strings.Contains(w.Body.String(), `"total":1`) {
+		t.Fatalf("list: %d %s", w.Code, w.Body)
+	}
+	for _, bad := range []string{"action=drop_table", "limit=0", "limit=201", "offset=-1", "q=" + strings.Repeat("x", 101)} {
+		if w := r.do(http.MethodGet, "/api/v1/audit/events?"+bad, "", token); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: got %d", bad, w.Code)
+		}
+	}
+	noAudit, _, token2 := rbacRouter(t, model.User{ID: memberID, Roles: []string{"OPERATOR"}, IsActive: true, Permissions: []string{model.PermLedgerRead}})
+	if w := noAudit.do(http.MethodGet, "/api/v1/audit/events", "", token2); w.Code != http.StatusForbidden {
+		t.Fatalf("without audit:read: %d", w.Code)
 	}
 }

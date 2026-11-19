@@ -47,7 +47,7 @@ export function ProfileHero({ name, email, roles, hasPhoto }: Props) {
               </button>
             )}
           </div>
-          <small className="pf-hint">JPEG, PNG or GIF · up to 10 MB</small>
+          <small className="pf-hint">Up to 10 MB · images are saved as WebP</small>
         </div>
       </div>
 

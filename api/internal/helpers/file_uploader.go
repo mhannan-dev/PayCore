@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -15,7 +16,11 @@ import (
 
 // FileSaver stores a stream and returns its storage key, SHA-256 and byte size.
 type FileSaver interface {
-	Save(io.Reader) (string, string, int64, error)
+	Save(io.Reader, ...string) (string, string, int64, error)
+}
+
+type ImageTransformer interface {
+	Convert(context.Context, io.Reader, string) ([]byte, string, error)
 }
 
 type UploadedFile struct {
@@ -37,7 +42,7 @@ func (e *UploadError) Error() string { return e.Code }
 // UploadFile accepts exactly one multipart file in the "file" field. It bounds
 // request size, cleans up multipart temporary files and detects MIME from bytes.
 // The caller handles authentication and persists the returned metadata.
-func UploadFile(w http.ResponseWriter, r *http.Request, files FileSaver) (UploadedFile, error) {
+func UploadFile(w http.ResponseWriter, r *http.Request, files FileSaver, images ImageTransformer) (UploadedFile, error) {
 	var result UploadedFile
 	r.Body = http.MaxBytesReader(w, r.Body, storage.MaxFileSize+64*1024)
 	err := r.ParseMultipartForm(1024 * 1024)
@@ -69,12 +74,30 @@ func UploadFile(w http.ResponseWriter, r *http.Request, files FileSaver) (Upload
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return result, &UploadError{http.StatusBadRequest, "invalid_file"}
 	}
-	key, hash, size, err := files.Save(io.MultiReader(bytes.NewReader(prefix[:n]), file))
+	err = nil
+	contentType := http.DetectContentType(prefix[:n])
+	var payload io.Reader = io.MultiReader(bytes.NewReader(prefix[:n]), file)
+	if imageUpload(prefix[:n], contentType, header.Header.Get("Content-Type"), name) {
+		var converted []byte
+		if images == nil {
+			return result, &UploadError{http.StatusServiceUnavailable, "image_conversion_busy"}
+		}
+		converted, name, err = images.Convert(r.Context(), payload, name)
+		if err == nil {
+			payload = bytes.NewReader(converted)
+			contentType = WebPContentType
+		}
+	}
+	var key, hash string
+	var size int64
+	if err == nil {
+		key, hash, size, err = files.Save(payload, name)
+	}
 	if errors.Is(err, storage.ErrFileSize) {
 		return result, &UploadError{http.StatusRequestEntityTooLarge, "file_size_must_be_1_byte_to_10_mib"}
 	}
 	if err != nil {
 		return result, err
 	}
-	return UploadedFile{FileName: name, ContentType: http.DetectContentType(prefix[:n]), StorageKey: key, SHA256: hash, SizeBytes: size}, nil
+	return UploadedFile{FileName: name, ContentType: contentType, StorageKey: key, SHA256: hash, SizeBytes: size}, nil
 }

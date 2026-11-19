@@ -5,33 +5,19 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"paycore/api/internal/database"
 	"paycore/api/internal/model"
 	"paycore/api/internal/repository"
-	"paycore/api/migrations"
 )
 
 func TestInvitationLifecycleAndRoles(t *testing.T) {
-	dsn := os.Getenv("DATABASE_TEST_URL")
-	if dsn == "" {
-		t.Skip("set DATABASE_TEST_URL for RBAC integration")
-	}
+	pool := isolatedPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pool, err := database.Open(ctx, dsn)
-	if err != nil {
-		t.Fatal("test database unavailable")
-	}
-	t.Cleanup(pool.Close)
-	if err = migrations.Apply(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
 	invites := repository.NewInvitationRepository(pool)
 	rbac := repository.NewRBACRepository(pool)
 	users := repository.NewUserRepository(pool)

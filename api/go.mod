@@ -3,10 +3,12 @@ module paycore/api
 go 1.27.2
 
 require (
+	github.com/HugoSmits86/nativewebp v1.3.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.48.0
+	golang.org/x/image v0.24.0
 	golang.org/x/term v0.48.0
 )
 

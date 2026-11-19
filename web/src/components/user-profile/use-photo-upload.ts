@@ -6,7 +6,7 @@ import { removePhoto, updatePhoto } from "@/lib/auth-session";
 import { notify } from "@/lib/notify";
 
 // Same limits the API enforces (storage.MaxFileSize, PUT /auth/photo checks).
-export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif"];
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/tiff"];
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_SIDE = 10000;
 const MAX_PIXELS = 25_000_000;
@@ -23,8 +23,10 @@ function imageSize(file: File): Promise<{ width: number; height: number }> {
 
 /** Returns why the file can't be used as a photo, or "" if it looks fine. */
 async function checkPhoto(file: File): Promise<string> {
-  if (!PHOTO_TYPES.includes(file.type)) return "Choose a JPEG, PNG or GIF image.";
+  if (!PHOTO_TYPES.includes(file.type)) return "Choose a JPEG, PNG, GIF, WebP, BMP or TIFF image.";
   if (file.size === 0 || file.size > MAX_BYTES) return "The photo must be smaller than 10 MB.";
+  // Browsers may not decode TIFF; the API validates dimensions before conversion.
+  if (file.type === "image/tiff") return "";
   try {
     const { width, height } = await imageSize(file);
     if (width > MAX_SIDE || height > MAX_SIDE || width * height > MAX_PIXELS) {

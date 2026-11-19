@@ -26,7 +26,7 @@ export function Topbar({ pathname, sidebarCollapsed = false, onToggleSidebar }: 
 export function DemoBanner() {
   return (
     <div className="demo-banner">
-      <span className="demo-label">DEMO DATA</span> Sample records only. Backend business APIs are not connected.
+      <span className="demo-label">PARTLY LIVE</span> Accounts, Transfer studio, Ledger explorer and Invariant audit use the live ledger. Overview, Reports, Notifications, Settlements and Simulator still show sample data.
     </div>
   );
 }

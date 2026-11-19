@@ -90,7 +90,7 @@ func TestUserSessionPostgresIntegration(t *testing.T) {
 		t.Fatal("UpdateName could not clear last_name:", err)
 	}
 	digest := sha256.Sum256(nonce[:])
-	if err = repo.CreateSession(ctx, u.ID, digest[:], time.Now().Add(time.Hour)); err != nil {
+	if err = repo.CreateSession(ctx, u.ID, u.PasswordHash, digest[:], time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = repo.FindSession(ctx, digest[:]); err != nil {

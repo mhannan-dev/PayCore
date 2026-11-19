@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"paycore/api/internal/helpers"
 	"strings"
 	"testing"
 	"time"
@@ -83,7 +84,7 @@ func TestAttachmentsIntegration(t *testing.T) {
 	ownerToken, otherToken := strings.Repeat("a", 64), strings.Repeat("b", 64)
 	for token, userID := range map[string]string{ownerToken: owner.ID, otherToken: other.ID} {
 		digest := sha256.Sum256([]byte(token))
-		if err = users.CreateSession(ctx, userID, digest[:], time.Now().Add(time.Hour)); err != nil {
+		if err = users.CreateSession(ctx, userID, hash, digest[:], time.Now().Add(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -97,7 +98,7 @@ func TestAttachmentsIntegration(t *testing.T) {
 	}
 	defer files.Close()
 	repo := repository.NewAttachmentRepository(pool)
-	router := server.SetupRouterWithAttachments(pool, handler.NewAuthHandler(auth, nil), handler.NewAttachmentHandler(auth, repo, files))
+	router := server.New(pool, server.Handlers{Auth: handler.NewAuthHandler(auth, nil), Attachments: handler.NewAttachmentHandler(handler.NewGuard(auth), repo, files, service.NewPhotoService(repo, files), helpers.NewWebPConverter(2))})
 	request := func(method, path, token, contentType string, body []byte) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, bytes.NewReader(body))
 		if token != "" {
@@ -175,8 +176,11 @@ func TestAttachmentsIntegration(t *testing.T) {
 		t.Fatal("profile did not reference attachment")
 	}
 	w = request("GET", "/api/v1/auth/photo", ownerToken, "", nil)
-	if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" || !bytes.Equal(w.Body.Bytes(), picture.Bytes()) {
+	if w.Code != 200 || w.Header().Get("Content-Type") != "image/webp" {
 		t.Fatal("photo content failed")
+	}
+	if decoded, format, err := image.Decode(bytes.NewReader(w.Body.Bytes())); err != nil || format != "webp" || decoded.Bounds().Dx() != 2 || decoded.Bounds().Dy() != 2 {
+		t.Fatalf("converted profile photo invalid: %s %v", format, err)
 	}
 	if w := request("PUT", "/api/v1/auth/photo", ownerToken, "application/json", []byte(`{}`)); w.Code != 400 {
 		t.Fatal("missing photo field silently cleared link")

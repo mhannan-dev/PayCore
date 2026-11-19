@@ -32,6 +32,7 @@ Fork the repository and create a branch from `main` named after the change, e.g.
 ### 3. Follow the project rules
 
 - **Type safety:** all Go and TypeScript code follows [docs/coding_rules.md](docs/coding_rules.md). In short: money is never a float, no `any` or `x!` in TypeScript, no unchecked type assertions in Go, closed sets are typed, and API contracts change in Go and TypeScript together.
+- **Architecture:** keep handlers thin (bind, call one service, respond), never pass `*gin.Context` below the handler, inject dependencies as interfaces declared by the consumer, return typed errors and let the error middleware map them to HTTP, and put files in the folders described in [docs/coding_rules.md](docs/coding_rules.md#architecture-go-api).
 - **Database changes** go in a new numbered migration in `api/migrations/` (never edit an applied one) and are backed by constraints (`NOT NULL`, `CHECK`, foreign keys).
 - **API responses** use `pkg/response`, so errors keep the standard envelope.
 - **Security-sensitive code** (auth, permissions, tokens, email links, uploads) needs tests for the failure paths too, not only the happy path.

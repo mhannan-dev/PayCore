@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 const MaxFileSize int64 = 10 << 20
@@ -26,23 +28,62 @@ func OpenLocal(directory string) (*Local, error) {
 	return &Local{root: root}, nil
 }
 func (s *Local) Close() error { return s.root.Close() }
+
 func validKey(key string) bool {
-	if len(key) != 64 {
+	if len(key) < 64 || len(key) > 75 {
 		return false
 	}
-	for _, c := range key {
-		if !(c >= 'a' && c <= 'f' || c >= '0' && c <= '9') {
+	base := key[:64]
+	for _, c := range base {
+		if !((c >= 'a' && c <= 'f') || (c >= '0' && c <= '9')) {
 			return false
+		}
+	}
+	if len(key) > 64 {
+		ext := key[64:]
+		if ext[0] != '.' || len(ext) < 2 {
+			return false
+		}
+		for _, c := range ext[1:] {
+			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+				return false
+			}
 		}
 	}
 	return true
 }
-func (s *Local) Save(reader io.Reader) (key, digest string, size int64, err error) {
+
+func sanitizeExt(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if len(ext) < 2 || len(ext) > 11 {
+		return ""
+	}
+	for _, c := range ext[1:] {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			return ""
+		}
+	}
+	return ext
+}
+
+// FileExtension preserves a simple original extension, normalized to lowercase.
+// Unknown or unsafe extensions use .bin; paths are never part of a storage key.
+func FileExtension(filename string) string {
+	if ext := sanitizeExt(filename); ext != "" {
+		return ext
+	}
+	return ".bin"
+}
+
+func (s *Local) Save(reader io.Reader, filename ...string) (key, digest string, size int64, err error) {
 	var random [32]byte
 	if _, err = rand.Read(random[:]); err != nil {
 		return
 	}
 	key = hex.EncodeToString(random[:])
+	if len(filename) > 0 {
+		key += FileExtension(filename[0])
+	}
 	file, err := s.root.OpenFile(key, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return

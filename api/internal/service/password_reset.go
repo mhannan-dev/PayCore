@@ -6,10 +6,12 @@ import (
 	"errors"
 	"html/template"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/mailer"
 	"paycore/api/internal/model"
 	"paycore/api/internal/repository"
@@ -35,14 +37,16 @@ type PasswordResetStore interface {
 // an account exists: unknown emails, inactive users and throttled requests all
 // succeed silently. Emails go through the embedded MailOutbox.
 type PasswordResetService struct {
-	*MailOutbox
+	EmailQueue
 	store   PasswordResetStore
 	captcha CaptchaVerifier
 	appURL  string
+	// Audit, when set, records issued reset links and completed resets.
+	Audit audit.Recorder
 }
 
-func NewPasswordResetService(store PasswordResetStore, captcha CaptchaVerifier, mail mailer.Sender, appURL string) *PasswordResetService {
-	return &PasswordResetService{MailOutbox: NewMailOutbox(mail), store: store, captcha: captcha, appURL: strings.TrimRight(appURL, "/")}
+func NewPasswordResetService(store PasswordResetStore, captcha CaptchaVerifier, queue EmailQueue, appURL string) *PasswordResetService {
+	return &PasswordResetService{EmailQueue: queue, store: store, captcha: captcha, appURL: strings.TrimRight(appURL, "/")}
 }
 
 // Request verifies the captcha and, when an active account has the email, queues a
@@ -65,6 +69,7 @@ func (s *PasswordResetService) Request(ctx context.Context, req model.PasswordRe
 	case err != nil:
 		return ErrUnavailable
 	}
+	audit.Record(ctx, s.Audit, audit.Event{Action: audit.PasswordResetRequested, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
 	if !s.Configured() {
 		log.Printf("password reset for user %s: no mail server is configured; nothing sent", u.ID)
 		return nil
@@ -73,7 +78,11 @@ func (s *PasswordResetService) Request(ctx context.Context, req model.PasswordRe
 	if err != nil {
 		return ErrUnavailable
 	}
-	s.Enqueue(ctx, "password reset email for user "+u.ID, msg, func(context.Context, string, string) {})
+	if err := s.Enqueue(ctx, "password reset email for user "+u.ID, msg, func(context.Context, string, string) {}); err != nil {
+		// Keep the same public answer as an unknown account, including under load.
+		slog.WarnContext(ctx, "password_reset_delivery_not_queued")
+		return nil
+	}
 	return nil
 }
 
@@ -96,6 +105,9 @@ func (s *PasswordResetService) Confirm(ctx context.Context, token, password stri
 	email, err := s.store.ResetPassword(ctx, digestToken(token), hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrResetToken
+	}
+	if err == nil {
+		audit.Record(ctx, s.Audit, audit.Event{Action: audit.PasswordResetCompleted, ActorEmail: audit.Ptr(email), TargetEmail: audit.Ptr(email)})
 	}
 	return email, err
 }

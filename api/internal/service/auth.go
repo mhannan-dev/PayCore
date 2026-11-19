@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/model"
 	"paycore/api/internal/repository"
 )
@@ -22,14 +24,26 @@ var ErrCaptcha = errors.New("invalid or expired captcha")
 var ErrUnavailable = errors.New("authentication unavailable")
 var ErrSession = errors.New("invalid session")
 
-type CaptchaVerifier interface{ Verify(string, string) bool }
-type AuthService struct {
-	store     repository.AuthStore
-	captcha   CaptchaVerifier
-	dummyHash []byte
+// AuthStore is the user and session storage AuthService needs (implemented by
+// repository.UserRepository). Declared here, by its consumer.
+type AuthStore interface {
+	FindByEmail(context.Context, string) (model.User, error)
+	CreateSession(context.Context, string, string, []byte, time.Time) error
+	FindSession(context.Context, []byte) (model.User, error)
+	DeleteSession(context.Context, []byte) error
+	UpdateName(ctx context.Context, userID, firstName string, lastName *string) (model.User, error)
 }
 
-func NewAuthService(store repository.AuthStore, captcha CaptchaVerifier) (*AuthService, error) {
+type CaptchaVerifier interface{ Verify(string, string) bool }
+type AuthService struct {
+	store     AuthStore
+	captcha   CaptchaVerifier
+	dummyHash []byte
+	// Audit, when set, records sign-ins (successful and failed) and sign-outs.
+	Audit audit.Recorder
+}
+
+func NewAuthService(store AuthStore, captcha CaptchaVerifier) (*AuthService, error) {
 	// Perform the same password KDF for unknown and known emails.
 	dummy, err := bcrypt.GenerateFromPassword([]byte("unused-dummy-password-for-unknown-users"), PasswordCost)
 	if err != nil {
@@ -65,7 +79,7 @@ func (s *AuthService) Login(ctx context.Context, req model.LoginRequest) (model.
 	}
 	u, err := s.store.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(req.Email)))
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return model.LoginResponse{}, ErrUnavailable
+		return model.LoginResponse{}, fmt.Errorf("find login identity: %w", err)
 	}
 	// Unknown emails and invited users without a password still pay for one bcrypt
 	// comparison, so response time does not reveal which accounts exist.
@@ -75,20 +89,42 @@ func (s *AuthService) Login(ctx context.Context, req model.LoginRequest) (model.
 	}
 	match := bcrypt.CompareHashAndPassword(hash, []byte(req.Password))
 	if err != nil || u.PasswordHash == "" || match != nil || !u.IsActive {
+		s.recordLoginFailure(ctx, req.Email, u, err == nil, match == nil)
 		return model.LoginResponse{}, ErrCredentials
 	}
 	token, err := randomHex()
 	if err != nil {
-		return model.LoginResponse{}, ErrUnavailable
+		return model.LoginResponse{}, fmt.Errorf("generate session token: %w", err)
 	}
 	digest := sha256.Sum256([]byte(token))
-	if err = s.store.CreateSession(ctx, u.ID, digest[:], time.Now().UTC().Add(SessionTTL)); err != nil {
-		if errors.Is(err, repository.ErrInactiveUser) {
+	if err = s.store.CreateSession(ctx, u.ID, u.PasswordHash, digest[:], time.Now().UTC().Add(SessionTTL)); err != nil {
+		if errors.Is(err, repository.ErrInactiveUser) || errors.Is(err, model.ErrCredentialsChanged) {
 			return model.LoginResponse{}, ErrCredentials
 		}
-		return model.LoginResponse{}, ErrUnavailable
+		return model.LoginResponse{}, fmt.Errorf("create session: %w", err)
 	}
+	audit.Record(ctx, s.Audit, audit.Event{Action: audit.LoginSucceeded,
+		ActorID: audit.Ptr(u.ID), ActorEmail: audit.Ptr(u.Email), TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
 	return model.LoginResponse{Token: token, TokenType: "Bearer", ExpiresIn: int64(SessionTTL.Seconds()), User: u.Public()}, nil
+}
+
+// recordLoginFailure audits a rejected sign-in with a fixed reason code. The API
+// response stays the same for every reason, so accounts cannot be discovered.
+func (s *AuthService) recordLoginFailure(ctx context.Context, email string, u model.User, found, passwordMatched bool) {
+	reason := "wrong_password"
+	switch {
+	case !found:
+		reason = "unknown_email"
+	case u.PasswordHash == "":
+		reason = "password_not_set"
+	case !u.IsActive && passwordMatched:
+		reason = "account_deactivated"
+	}
+	e := audit.Event{Action: audit.LoginFailed, TargetEmail: audit.Ptr(strings.ToLower(strings.TrimSpace(email))), Details: audit.Details{Reason: reason}}
+	if found {
+		e.TargetID = audit.Ptr(u.ID)
+	}
+	audit.Record(ctx, s.Audit, e)
 }
 
 func (s *AuthService) CurrentUser(ctx context.Context, token string) (model.UserDTO, error) {
@@ -104,7 +140,7 @@ func (s *AuthService) CurrentUser(ctx context.Context, token string) (model.User
 		return model.UserDTO{}, ErrSession
 	}
 	if err != nil {
-		return model.UserDTO{}, ErrUnavailable
+		return model.UserDTO{}, fmt.Errorf("load session: %w", err)
 	}
 	if !u.IsActive {
 		return model.UserDTO{}, ErrSession
@@ -127,7 +163,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, token string, req model
 		return model.UserDTO{}, ErrSession
 	}
 	if err != nil {
-		return model.UserDTO{}, ErrUnavailable
+		return model.UserDTO{}, fmt.Errorf("update profile: %w", err)
 	}
 	return u.Public(), nil
 }
@@ -140,8 +176,19 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 		return ErrSession
 	}
 	digest := sha256.Sum256([]byte(token))
+	// Look the session up first so the audit trail knows who signed out.
+	var who *model.User
+	if s.Audit != nil {
+		if u, err := s.store.FindSession(ctx, digest[:]); err == nil {
+			who = &u
+		}
+	}
 	if err := s.store.DeleteSession(ctx, digest[:]); err != nil {
-		return ErrUnavailable
+		return fmt.Errorf("delete session: %w", err)
+	}
+	if who != nil {
+		audit.Record(ctx, s.Audit, audit.Event{Action: audit.Logout,
+			ActorID: audit.Ptr(who.ID), ActorEmail: audit.Ptr(who.Email), TargetID: audit.Ptr(who.ID), TargetEmail: audit.Ptr(who.Email)})
 	}
 	return nil
 }

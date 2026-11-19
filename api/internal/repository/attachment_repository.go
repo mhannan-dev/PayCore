@@ -24,7 +24,8 @@ func (r *AttachmentRepository) Create(ctx context.Context, a model.Attachment) (
 	return scanAttachment(r.pool.QueryRow(ctx, "INSERT INTO attachments (owner_user_id, file_name, content_type, size_bytes, sha256, storage_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+attachmentColumns, a.OwnerUserID, a.FileName, a.ContentType, a.SizeBytes, a.SHA256, a.StorageKey))
 }
 func (r *AttachmentRepository) Get(ctx context.Context, owner, id string) (model.Attachment, error) {
-	return scanAttachment(r.pool.QueryRow(ctx, "SELECT "+attachmentColumns+" FROM attachments WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL", id, owner))
+	a, err := scanAttachment(r.pool.QueryRow(ctx, "SELECT "+attachmentColumns+" FROM attachments WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL", id, owner))
+	return a, notFound(err, ErrAttachmentNotFound)
 }
 func (r *AttachmentRepository) List(ctx context.Context, owner string, limit, offset int) ([]model.Attachment, error) {
 	rows, err := r.pool.Query(ctx, "SELECT "+attachmentColumns+" FROM attachments WHERE owner_user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3", owner, limit, offset)
@@ -42,7 +43,8 @@ func (r *AttachmentRepository) List(ctx context.Context, owner string, limit, of
 	}
 	return result, rows.Err()
 }
-func (r *AttachmentRepository) Delete(ctx context.Context, owner, id string) error {
+func (r *AttachmentRepository) Delete(ctx context.Context, owner, id string) (err error) {
+	defer func() { err = notFound(err, ErrAttachmentNotFound) }()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -60,7 +62,8 @@ func (r *AttachmentRepository) Delete(ctx context.Context, owner, id string) err
 	}
 	return tx.Commit(ctx)
 }
-func (r *AttachmentRepository) SetPhoto(ctx context.Context, owner string, id *string) error {
+func (r *AttachmentRepository) SetPhoto(ctx context.Context, owner string, id *string) (err error) {
+	defer func() { err = notFound(err, ErrAttachmentNotFound) }()
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -68,7 +71,7 @@ func (r *AttachmentRepository) SetPhoto(ctx context.Context, owner string, id *s
 	defer tx.Rollback(context.Background())
 	if id != nil {
 		var locked string
-		if err = tx.QueryRow(ctx, "SELECT id FROM attachments WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL AND storage_kind='LOCAL' AND content_type IN ('image/jpeg','image/png','image/gif') FOR UPDATE", *id, owner).Scan(&locked); err != nil {
+		if err = tx.QueryRow(ctx, "SELECT id FROM attachments WHERE id=$1 AND owner_user_id=$2 AND deleted_at IS NULL AND storage_kind='LOCAL' AND content_type IN ('image/jpeg','image/png','image/gif','image/webp') FOR UPDATE", *id, owner).Scan(&locked); err != nil {
 			return err
 		}
 	}

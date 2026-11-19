@@ -6,9 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"paycore/api/internal/helpers"
 	"strings"
 	"syscall"
 	"time"
@@ -25,17 +27,17 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	listRoutes := flag.Bool("routes", false, "Print all registered API endpoints and exit")
 	flag.Parse()
 
 	cfg := config.Load()
 	var db server.DatabasePinger
-	var authHandler *handler.AuthHandler
-	var attachmentHandler *handler.AttachmentHandler
-	var rbacHandler *handler.RBACHandler
+	// Composition root: the only place that creates concrete repositories, services
+	// and handlers and wires them together (docs/coding_rules.md rule 25).
+	var handlers server.Handlers
 	var invites *service.InvitationService
 	var resets *service.PasswordResetService
-	var resetHandler *handler.PasswordResetHandler
 	if !*listRoutes {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := database.Open(ctx, cfg.DatabaseURL)
@@ -56,13 +58,17 @@ func main() {
 		if err != nil {
 			log.Fatal("Authentication initialization failed.")
 		}
-		authHandler = handler.NewAuthHandler(authService, challenges)
+		auditLog := repository.NewAuditRepository(pool)
+		authService.Audit = auditLog
+		guard := handler.NewGuard(authService)
+		handlers.Auth = handler.NewAuthHandler(authService, challenges)
+		handlers.Audit = handler.NewAuditHandler(auditLog, guard)
 		files, err := storage.OpenLocal(cfg.UploadDir)
 		if err != nil {
 			log.Fatal("Upload storage initialization failed. Check UPLOAD_DIR permissions.")
 		}
 		defer files.Close()
-		attachmentHandler = handler.NewAttachmentHandler(authService, repository.NewAttachmentRepository(pool), files)
+		handlers.Attachments = handler.NewAttachmentHandler(guard, repository.NewAttachmentRepository(pool), files, service.NewPhotoService(repository.NewAttachmentRepository(pool), files), helpers.NewWebPConverter(2))
 		var mail mailer.Sender
 		switch {
 		case cfg.SMTPHost != "":
@@ -71,25 +77,26 @@ func main() {
 				log.Fatalf("Email configuration (%s) is invalid: %v", cfg.SMTPSource, err)
 			}
 			mail = smtpSender
-			auth := "no auth"
-			if cfg.SMTPUsername != "" {
-				auth = "auth as " + cfg.SMTPUsername
-			}
-			log.Printf("Email: SMTP %s:%s (%s, %s, from %s; from %s variables)", cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPEncryption, auth, cfg.SMTPFrom, cfg.SMTPSource)
+			slog.Info("smtp_configured", "host", cfg.SMTPHost, "port", cfg.SMTPPort, "encryption", cfg.SMTPEncryption, "authenticated", cfg.SMTPUsername != "", "source", cfg.SMTPSource)
 		case cfg.Environment == "development":
 			mail = mailer.Log{}
 			log.Println("Email: SMTP_HOST is not set; invitation emails are written to this log (development only)")
 		default:
 			log.Println("Email: SMTP_HOST is not set; invitations are created but not emailed")
 		}
-		invites = service.NewInvitationService(repository.NewInvitationRepository(pool), mail, cfg.AppURL)
-		rbacHandler = handler.NewRBACHandler(authService, repository.NewRBACRepository(pool), invites)
-		resets = service.NewPasswordResetService(repository.NewPasswordResetRepository(pool), challenges, mail, cfg.AppURL)
-		resetHandler = handler.NewPasswordResetHandler(resets)
+		queue := service.NewMailOutbox(mail)
+		invites = service.NewInvitationService(repository.NewInvitationRepository(pool), queue, cfg.AppURL)
+		invites.Audit = auditLog
+		handlers.Users = handler.NewUsersHandler(service.NewUserAdminService(repository.NewRBACRepository(pool), invites), guard)
+		handlers.Invitations = handler.NewInvitationHandler(invites)
+		resets = service.NewPasswordResetService(repository.NewPasswordResetRepository(pool), challenges, queue, cfg.AppURL)
+		resets.Audit = auditLog
+		handlers.PasswordResets = handler.NewPasswordResetHandler(resets)
+		handlers.Ledger = handler.NewLedgerHandler(service.NewLedgerService(repository.NewLedgerRepository(pool)), guard)
 		db = pool
 		log.Println("PostgreSQL connection verified; connection pool ready")
 	}
-	router := server.SetupRouterWithAttachments(db, authHandler, attachmentHandler, rbacHandler, resetHandler)
+	router := server.New(db, handlers)
 
 	// If -routes flag is provided, print route table and exit
 	if *listRoutes {
@@ -121,6 +128,9 @@ func main() {
 			log.Printf("  [%s] http://localhost:%s%s", r.Method, cfg.Port, r.Path)
 		}
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if portInUse(err) {
+				log.Fatalf("Server failed to start: port %s is already in use, most likely by an older PayCore API that is still running. Stop it (or restart run.ps1, which stops it) and try again.", cfg.Port)
+			}
 			log.Fatalf("Server failed to start: %v", err)
 		}
 	}()
@@ -150,4 +160,11 @@ func main() {
 	}
 
 	log.Println("Server exiting")
+}
+
+// portInUse reports "address already in use" on every platform (Windows reports
+// WSAEADDRINUSE, errno 10048, which is not syscall.EADDRINUSE there).
+func portInUse(err error) bool {
+	var errno syscall.Errno
+	return errors.Is(err, syscall.EADDRINUSE) || (errors.As(err, &errno) && errno == 10048)
 }

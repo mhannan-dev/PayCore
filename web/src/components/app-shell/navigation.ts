@@ -13,6 +13,7 @@ export const NAVIGATION: NavItem[] = [
   { href: "/profile", label: "User profile", icon: "user" },
   { href: "/admin/users", label: "Users & access", icon: "users", section: "admin" },
   { href: "/admin/roles", label: "Roles & permissions", icon: "key", section: "admin" },
+  { href: "/admin/audit-log", label: "Audit log", icon: "file", section: "admin" },
 ];
 
 export const pageLabel = (pathname: string) => NAVIGATION.find((item) => item.href === pathname)?.label ?? "Page";

@@ -4,17 +4,31 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
+  # Before every build, force-stop any API still running from THIS project's tmp
+  # binary. Air stops the previous process itself, but on Windows a stop can be
+  # missed (e.g. overlapping rebuilds after quick multi-file saves); the stray
+  # process then keeps the port and the new build never starts. Commands run in
+  # PowerShell on Windows; this only matches .\tmp\paycore-api.exe in this folder.
+  pre_cmd = ['''
+    $bin = Join-Path (Get-Location) 'tmp\paycore-api.exe';
+    Get-Process paycore-api -ErrorAction SilentlyContinue |
+      Where-Object { $_.Path -eq $bin } |
+      ForEach-Object { Write-Host "air: stopping stale API (PID $($_.Id))"; Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue };
+    exit 0
+  ''']
   cmd = "go build -o ./tmp/paycore-api.exe ./cmd/server"
   entrypoint = ["./tmp/paycore-api.exe"]
   # .sql: migrations are embedded in the binary, so a new migration needs a rebuild too.
   include_ext = ["go", "sql"]
   exclude_dir = ["tmp", "bin", "uploads", "vendor"]
   exclude_regex = ["_test\\.go$"]
-  # Wait for editors to finish saving several files before rebuilding.
-  delay = 500
-  # A broken build keeps the last good server running instead of stopping it.
+  # Wait for editors (and tools) to finish saving several files before rebuilding;
+  # one rebuild per burst also avoids overlapping restarts.
+  delay = 1500
+  # On Windows, Air must stop the running API before building (the .exe is locked
+  # while it runs), so a failed build leaves no API running until the next good build.
   stop_on_error = false
-  # Windows cannot deliver SIGINT to the child; give it a moment to release the port.
+  # Windows cannot deliver SIGINT to the child; Air uses TASKKILL /T instead.
   send_interrupt = false
   kill_delay = "500ms"
   log = "build-errors.log"

@@ -153,3 +153,17 @@
 .adm-email.is-pending { color: #8d641c; }
 .adm-email.is-failed { color: #ad463a; cursor: help; }
 .adm-email-spinner { width: 10px; height: 10px; border-width: 1.5px; }
+
+/* Deactivate / activate */
+.adm-deactivate-btn { color: #8d641c; border-color: #f0dfbd; }
+.adm-deactivate-btn:hover:not(:disabled) { background: #fdf3e2; }
+.adm-activate-btn { color: #286c47; border-color: #cfe5cf; }
+.adm-activate-btn:hover:not(:disabled) { background: #edf6ed; }
+.adm-dialog-danger.is-warning .adm-danger-icon { background: #fdf3e2; color: #8d641c; box-shadow: 0 0 0 6px #fffaf0; }
+.adm-btn-warning { background: #b07d1a; color: #fff; }
+.adm-btn-warning:hover:not(:disabled) { background: #93680f; }
+.adm-confirm-text p { margin: 0; font-size: 12px; line-height: 1.7; color: #6f8270; overflow-wrap: anywhere; }
+
+/* Audit log */
+.adm-audit-summary { font-size: 11px; color: #4d6a43; max-width: 320px; overflow-wrap: anywhere; }
+.adm-audit-ip { font-size: 10px; color: #7f8f7c; }

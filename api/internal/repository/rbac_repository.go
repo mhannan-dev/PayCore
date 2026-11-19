@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/model"
 )
 
@@ -290,12 +290,13 @@ func (r *RBACRepository) SetUserRoles(ctx context.Context, userID string, roleCo
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('paycore.user_roles'))"); err != nil {
 		return model.ManagedUser{}, err
 	}
-	tag, err := tx.Exec(ctx, "UPDATE users SET roles = $2, updated_at = NOW() WHERE id = $1", userID, normalized)
-	if err != nil {
-		return model.ManagedUser{}, err
+	var email string
+	var before []string
+	if err := tx.QueryRow(ctx, "SELECT email, roles FROM users WHERE id = $1 FOR UPDATE", userID).Scan(&email, &before); err != nil {
+		return model.ManagedUser{}, notFound(err, ErrUserNotFound)
 	}
-	if tag.RowsAffected() == 0 {
-		return model.ManagedUser{}, pgx.ErrNoRows
+	if _, err := tx.Exec(ctx, "UPDATE users SET roles = $2, updated_at = NOW() WHERE id = $1", userID, normalized); err != nil {
+		return model.ManagedUser{}, err
 	}
 	if _, err := tx.Exec(ctx, "DELETE FROM user_roles WHERE user_id = $1", userID); err != nil {
 		return model.ManagedUser{}, err
@@ -309,6 +310,10 @@ func (r *RBACRepository) SetUserRoles(ctx context.Context, userID string, roleCo
 	}
 	if admins == 0 {
 		return model.ManagedUser{}, ErrLastAdmin
+	}
+	if err := insertAudit(ctx, tx, audit.Event{Action: audit.RolesChanged, TargetID: audit.Ptr(userID), TargetEmail: audit.Ptr(email),
+		Details: audit.Details{RolesBefore: before, RolesAfter: normalized}}); err != nil {
+		return model.ManagedUser{}, err
 	}
 	u, err := scanManagedUser(tx.QueryRow(ctx, "SELECT "+managedUserColumns+" FROM "+managedUserFrom+" WHERE users.id = $1", userID))
 	if err != nil {
@@ -331,12 +336,10 @@ func (r *RBACRepository) DeleteUser(ctx context.Context, userID string) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('paycore.user_roles'))"); err != nil {
 		return err
 	}
-	tag, err := tx.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+	var email string
+	var roles []string
+	if err := tx.QueryRow(ctx, "DELETE FROM users WHERE id = $1 RETURNING email, roles", userID).Scan(&email, &roles); err != nil {
+		return notFound(err, ErrUserNotFound)
 	}
 	var admins int
 	if err := tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE is_active AND 'ADMIN' = ANY(roles)").Scan(&admins); err != nil {
@@ -345,5 +348,62 @@ func (r *RBACRepository) DeleteUser(ctx context.Context, userID string) error {
 	if admins == 0 {
 		return ErrLastAdmin
 	}
+	if err := insertAudit(ctx, tx, audit.Event{Action: audit.UserDeleted, TargetID: audit.Ptr(userID), TargetEmail: audit.Ptr(email),
+		Details: audit.Details{RolesBefore: roles}}); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// SetUserActive deactivates or reactivates a user. Deactivating signs them out of
+// every session and voids their reset links; the account and its history remain.
+// Returns pgx.ErrNoRows for an unknown user and ErrLastAdmin when it would leave no
+// active administrator. Setting the current state again is a no-op (no audit event).
+func (r *RBACRepository) SetUserActive(ctx context.Context, userID string, active bool) (model.ManagedUser, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return model.ManagedUser{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('paycore.user_roles'))"); err != nil {
+		return model.ManagedUser{}, err
+	}
+	var email string
+	var wasActive bool
+	if err := tx.QueryRow(ctx, "SELECT email, is_active FROM users WHERE id = $1 FOR UPDATE", userID).Scan(&email, &wasActive); err != nil {
+		return model.ManagedUser{}, notFound(err, ErrUserNotFound)
+	}
+	if wasActive != active {
+		if _, err := tx.Exec(ctx, "UPDATE users SET is_active = $2, updated_at = NOW() WHERE id = $1", userID, active); err != nil {
+			return model.ManagedUser{}, err
+		}
+		action := audit.UserActivated
+		if !active {
+			action = audit.UserDeactivated
+			for _, stmt := range []string{
+				"DELETE FROM auth_sessions WHERE user_id = $1",
+				"DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL",
+			} {
+				if _, err := tx.Exec(ctx, stmt, userID); err != nil {
+					return model.ManagedUser{}, err
+				}
+			}
+			var admins int
+			if err := tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE is_active AND 'ADMIN' = ANY(roles)").Scan(&admins); err != nil {
+				return model.ManagedUser{}, err
+			}
+			if admins == 0 {
+				return model.ManagedUser{}, ErrLastAdmin
+			}
+		}
+		if err := insertAudit(ctx, tx, audit.Event{Action: action, TargetID: audit.Ptr(userID), TargetEmail: audit.Ptr(email)}); err != nil {
+			return model.ManagedUser{}, err
+		}
+	}
+	u, err := scanManagedUser(tx.QueryRow(ctx, "SELECT "+managedUserColumns+" FROM "+managedUserFrom+" WHERE users.id = $1", userID))
+	if err != nil {
+		return model.ManagedUser{}, err
+	}
+	return u, tx.Commit(ctx)
 }

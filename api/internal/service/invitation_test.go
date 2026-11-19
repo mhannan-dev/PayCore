@@ -90,7 +90,7 @@ func TestInvitationLocalSMTP(t *testing.T) {
 	}
 	store := &invitationDeliveryStore{}
 	sender := mailer.SMTP{Host: "127.0.0.1", Port: port, From: "PayCore <no-reply@paycore.local>"}
-	svc := NewInvitationService(store, sender, "http://localhost:3000")
+	svc := NewInvitationService(store, testMailQueue(sender), "http://localhost:3000")
 	if status := invite(t, svc); status != EmailPending || !store.created {
 		t.Fatalf("queued status %q, created %t", status, store.created)
 	}
@@ -101,7 +101,7 @@ func TestInvitationLocalSMTP(t *testing.T) {
 
 func TestInvitationLogIsNotDelivery(t *testing.T) {
 	store := &invitationDeliveryStore{}
-	svc := NewInvitationService(store, mailer.Log{}, "http://localhost:3000")
+	svc := NewInvitationService(store, NewMailOutbox(mailer.Log{}), "http://localhost:3000")
 	invite(t, svc)
 	if final, _, _ := store.final(); final != EmailNotConfigured || !store.created {
 		t.Fatalf("log preview must keep the account and record not_configured, got %q", final)
@@ -110,7 +110,7 @@ func TestInvitationLogIsNotDelivery(t *testing.T) {
 
 func TestInvitationWithoutMailer(t *testing.T) {
 	store := &invitationDeliveryStore{}
-	svc := NewInvitationService(store, nil, "http://localhost:3000")
+	svc := NewInvitationService(store, NewMailOutbox(nil), "http://localhost:3000")
 	if status := invite(t, svc); status != EmailNotConfigured {
 		t.Fatalf("status %q", status)
 	}
@@ -122,8 +122,8 @@ func TestInvitationWithoutMailer(t *testing.T) {
 func TestInvitationRetriesTemporaryFailures(t *testing.T) {
 	store := &invitationDeliveryStore{}
 	sender := &scriptedSender{errs: []error{errors.New("dial tcp: i/o timeout"), &textproto.Error{Code: 421, Msg: "try later"}}}
-	svc := NewInvitationService(store, sender, "http://localhost:3000")
-	svc.RetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	svc := NewInvitationService(store, testMailQueue(sender), "http://localhost:3000")
+
 	invite(t, svc)
 	final, all, _ := store.final()
 	if final != EmailSent || sender.calls != 3 || len(all) != 3 || all[0] != EmailPending {
@@ -134,8 +134,8 @@ func TestInvitationRetriesTemporaryFailures(t *testing.T) {
 func TestInvitationStopsOnPermanentFailure(t *testing.T) {
 	store := &invitationDeliveryStore{}
 	sender := &scriptedSender{errs: []error{&textproto.Error{Code: 535, Msg: "5.7.139 Authentication unsuccessful"}}}
-	svc := NewInvitationService(store, sender, "http://localhost:3000")
-	svc.RetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	svc := NewInvitationService(store, testMailQueue(sender), "http://localhost:3000")
+
 	invite(t, svc)
 	final, all, errText := store.final()
 	if final != EmailFailed || sender.calls != 1 || errText == "" {
@@ -147,10 +147,16 @@ func TestInvitationGivesUpAfterRetries(t *testing.T) {
 	store := &invitationDeliveryStore{}
 	down := errors.New("connection refused")
 	sender := &scriptedSender{errs: []error{down, down, down, down}}
-	svc := NewInvitationService(store, sender, "http://localhost:3000")
-	svc.RetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	svc := NewInvitationService(store, testMailQueue(sender), "http://localhost:3000")
+
 	invite(t, svc)
 	if final, all, _ := store.final(); final != EmailFailed || sender.calls != 3 {
 		t.Fatalf("give up: calls=%d statuses=%v", sender.calls, all)
 	}
+}
+
+func testMailQueue(sender mailer.Sender) *MailOutbox {
+	q := NewMailOutbox(sender)
+	q.retryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	return q
 }

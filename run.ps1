@@ -123,6 +123,21 @@ function Stop-StaleWebDevServer {
 }
 Stop-StaleWebDevServer
 
+# An API left over from an earlier run (or a hot-reload restart that missed it)
+# keeps its port, so the new API would silently move to another port or fail to
+# start. Only this project's Air build (api\tmp\paycore-api.exe) is matched, by
+# full path, so other programs and other Go projects are never touched.
+function Stop-StaleApiServer {
+    $airBinary = Join-Path $apiDirectory 'tmp\paycore-api.exe'
+    $stale = @(Get-Process paycore-api -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $airBinary })
+    foreach ($process in $stale) {
+        Write-Host "Stopping previous PayCore API (PID $($process.Id), $($process.Path))."
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($stale.Count -gt 0) { Start-Sleep -Milliseconds 500 }
+}
+Stop-StaleApiServer
+
 $ApiPort = Find-DevelopmentPort -PreferredPort $ApiPort -Service 'API'
 $WebPort = Find-DevelopmentPort -PreferredPort $WebPort -Service 'Web'
 if ($WebPort -eq $ApiPort) {

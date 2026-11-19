@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/handler"
 	"paycore/api/internal/middleware"
 	"paycore/api/pkg/response"
@@ -13,26 +14,35 @@ type DatabasePinger interface {
 	Ping(context.Context) error
 }
 
-// SetupRouter accepts nil for offline route discovery; readiness then returns 503.
-func SetupRouter(db DatabasePinger, authHandlers ...*handler.AuthHandler) *gin.Engine {
-	var auth *handler.AuthHandler
-	if len(authHandlers) > 0 {
-		auth = authHandlers[0]
-	}
-	return SetupRouterWithAttachments(db, auth, nil)
+// Handlers are the route handlers wired by cmd/server (the composition root).
+// A nil handler is replaced by one without dependencies, whose routes answer 503,
+// so the full route table exists for discovery (`-routes`) and tests.
+type Handlers struct {
+	Auth           *handler.AuthHandler
+	Attachments    *handler.AttachmentHandler
+	Users          *handler.UsersHandler
+	Invitations    *handler.InvitationHandler
+	PasswordResets *handler.PasswordResetHandler
+	Audit          *handler.AuditHandler
+	Ledger         *handler.LedgerHandler
 }
 
-// RouteRegistrar is a handler that adds its own routes under /api/v1.
-type RouteRegistrar interface{ Register(api *gin.RouterGroup) }
+// SetupRouter builds a router with only the auth handler (tests, route discovery).
+func SetupRouter(db DatabasePinger, authHandlers ...*handler.AuthHandler) *gin.Engine {
+	var h Handlers
+	if len(authHandlers) > 0 {
+		h.Auth = authHandlers[0]
+	}
+	return New(db, h)
+}
 
-// SetupRouterWithAttachments wires the API. extra may hold a *handler.RBACHandler and a
-// *handler.PasswordResetHandler; any that are omitted (or nil) register routes that answer 503.
-func SetupRouterWithAttachments(db DatabasePinger, authHandler *handler.AuthHandler, attachmentHandler *handler.AttachmentHandler, extra ...RouteRegistrar) *gin.Engine {
+// New builds the API router. db may be nil; readiness then answers 503.
+func New(db DatabasePinger, h Handlers) *gin.Engine {
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
 
-	// Default Gin middlewares
-	r.Use(gin.Logger())
+	r.Use(middleware.RequestID())
+	r.Use(middleware.AccessLog())
 	// Panics are logged by gin and answered with the standard JSON error envelope.
 	r.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
 		c.Abort()
@@ -44,46 +54,45 @@ func SetupRouterWithAttachments(db DatabasePinger, authHandler *handler.AuthHand
 	r.NoMethod(response.MethodNotAllowed)
 
 	r.Use(corsMiddleware())
+	// Audit events record where each request came from.
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(audit.WithMeta(c.Request.Context(), audit.Meta{IP: c.ClientIP(), UserAgent: c.Request.UserAgent()}))
+		c.Next()
+	})
+	// Every error passed to c.Error becomes a response here (coding rule 26).
+	r.Use(middleware.Errors(ErrorTable))
 
 	registerHealthRoutes(r, db)
 
-	// Handlers
-	if authHandler == nil {
-		authHandler = handler.NewAuthHandler(nil, nil)
+	if h.Auth == nil {
+		h.Auth = handler.NewAuthHandler(nil, nil)
 	}
-	if attachmentHandler == nil {
-		attachmentHandler = handler.NewAttachmentHandler(nil, nil, nil)
+	if h.Attachments == nil {
+		h.Attachments = handler.NewAttachmentHandler(nil, nil, nil, nil, nil)
 	}
-	var rbacHandler RouteRegistrar = handler.NewRBACHandler(nil, nil, nil)
-	var resetHandler RouteRegistrar = handler.NewPasswordResetHandler(nil)
-	for _, registrar := range extra {
-		switch h := registrar.(type) {
-		case *handler.RBACHandler:
-			if h != nil {
-				rbacHandler = h
-			}
-		case *handler.PasswordResetHandler:
-			if h != nil {
-				resetHandler = h
-			}
-		}
+	if h.Users == nil {
+		h.Users = handler.NewUsersHandler(nil, nil)
 	}
-	// API v1 Routes
-	v1 := r.Group("/api/v1")
-	attachmentHandler.Register(v1)
-	rbacHandler.Register(v1)
-	resetHandler.Register(v1)
-	{
-		auth := v1.Group("/auth")
-		auth.Use(func(c *gin.Context) { c.Header("Cache-Control", "no-store"); c.Next() }, middleware.AuthRateLimit())
-		{
-			auth.GET("/captcha", authHandler.Challenge)
-			auth.POST("/login", authHandler.Login)
-			auth.GET("/me", authHandler.Me)
-			auth.PATCH("/me", authHandler.UpdateMe)
-			auth.POST("/logout", authHandler.Logout)
-		}
+	if h.Invitations == nil {
+		h.Invitations = handler.NewInvitationHandler(nil)
+	}
+	if h.PasswordResets == nil {
+		h.PasswordResets = handler.NewPasswordResetHandler(nil)
+	}
+	if h.Audit == nil {
+		h.Audit = handler.NewAuditHandler(nil, nil)
+	}
+	if h.Ledger == nil {
+		h.Ledger = handler.NewLedgerHandler(nil, nil)
 	}
 
+	v1 := r.Group("/api/v1")
+	h.Auth.Register(v1)
+	h.Attachments.Register(v1)
+	h.Users.Register(v1)
+	h.Invitations.Register(v1)
+	h.PasswordResets.Register(v1)
+	h.Audit.Register(v1)
+	h.Ledger.Register(v1)
 	return r
 }

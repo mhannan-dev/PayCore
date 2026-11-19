@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/model"
 )
 
@@ -32,7 +33,10 @@ func (s *fakeUsers) FindByEmail(_ context.Context, email string) (model.User, er
 	}
 	return s.user, nil
 }
-func (s *fakeUsers) CreateSession(_ context.Context, _ string, hash []byte, _ time.Time) error {
+func (s *fakeUsers) CreateSession(_ context.Context, _ string, expected string, hash []byte, _ time.Time) error {
+	if expected != s.user.PasswordHash {
+		return model.ErrCredentialsChanged
+	}
 	s.hash = append([]byte(nil), hash...)
 	return nil
 }
@@ -177,5 +181,59 @@ func TestHashPasswordLength(t *testing.T) {
 		if (err == nil) != tc.ok {
 			t.Errorf("%q: got %v", tc.password, err)
 		}
+	}
+}
+
+type memAudit struct{ events []audit.Event }
+
+func (m *memAudit) Record(_ context.Context, e audit.Event) error {
+	m.events = append(m.events, e)
+	return nil
+}
+
+// Sign-ins are audited with a reason code, but every failure answers the same.
+func TestLoginAudit(t *testing.T) {
+	hash, err := HashPassword("Audit#1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeUsers{user: model.User{ID: "user-9", FirstName: "A", Email: "a@example.test", PasswordHash: hash, Roles: []string{"OPERATOR"}, IsActive: true}}
+	captcha := &fakeCaptcha{}
+	auth, err := NewAuthService(store, captcha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &memAudit{}
+	auth.Audit = rec
+	login := func(email, password string) error {
+		captcha.valid = true
+		_, err := auth.Login(context.Background(), model.LoginRequest{Email: email, Password: password, CaptchaID: "id", CaptchaAnswer: "1"})
+		return err
+	}
+	if err := login("nobody@example.test", "Audit#1234"); !errors.Is(err, ErrCredentials) {
+		t.Fatal(err)
+	}
+	if err := login("a@example.test", "Wrong#1234"); !errors.Is(err, ErrCredentials) {
+		t.Fatal(err)
+	}
+	store.user.IsActive = false
+	if err := login("a@example.test", "Audit#1234"); !errors.Is(err, ErrCredentials) {
+		t.Fatal(err)
+	}
+	store.user.IsActive = true
+	if err := login(" A@Example.TEST ", "Audit#1234"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"login_failed/unknown_email", "login_failed/wrong_password", "login_failed/account_deactivated", "login_succeeded/"}
+	if len(rec.events) != len(want) {
+		t.Fatalf("events: %+v", rec.events)
+	}
+	for i, e := range rec.events {
+		if got := string(e.Action) + "/" + e.Details.Reason; got != want[i] {
+			t.Errorf("event %d: %s, want %s", i, got, want[i])
+		}
+	}
+	if last := rec.events[3]; last.ActorID == nil || *last.ActorID != "user-9" {
+		t.Fatalf("success actor: %+v", last)
 	}
 }

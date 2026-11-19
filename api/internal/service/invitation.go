@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/mailer"
 	"paycore/api/internal/model"
 )
@@ -34,16 +35,19 @@ type InvitationStore interface {
 }
 
 // InvitationService invites users by email and lets them set their own password.
-// Emails go through the embedded MailOutbox (RetryDelays, Wait and Shutdown are promoted).
+// Emails go through an injected delivery queue with a shared lifecycle.
 type InvitationService struct {
-	*MailOutbox
+	EmailQueue
 	store  InvitationStore
 	appURL string
+	// Audit, when set, records invitations sent, re-sent and accepted.
+	Audit audit.Recorder
 }
 
-// NewInvitationService: mail may be nil (invitations are created but not emailed).
-func NewInvitationService(store InvitationStore, mail mailer.Sender, appURL string) *InvitationService {
-	return &InvitationService{MailOutbox: NewMailOutbox(mail), store: store, appURL: strings.TrimRight(appURL, "/")}
+// NewInvitationService requires a queue; an unconfigured queue creates invitations
+// without sending mail.
+func NewInvitationService(store InvitationStore, queue EmailQueue, appURL string) *InvitationService {
+	return &InvitationService{EmailQueue: queue, store: store, appURL: strings.TrimRight(appURL, "/")}
 }
 
 // Invite creates the user (already normalized by the caller) and queues the invitation
@@ -58,6 +62,8 @@ func (s *InvitationService) Invite(ctx context.Context, req model.CreateUserRequ
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
+	audit.Record(ctx, s.Audit, audit.Event{Action: audit.UserInvited, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email),
+		Details: audit.Details{RolesAfter: u.Roles}})
 	return s.dispatch(ctx, u, token, digest)
 }
 
@@ -71,6 +77,7 @@ func (s *InvitationService) Resend(ctx context.Context, userID, invitedBy string
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
+	audit.Record(ctx, s.Audit, audit.Event{Action: audit.InvitationResent, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
 	return s.dispatch(ctx, u, token, digest)
 }
 
@@ -92,7 +99,10 @@ func (s *InvitationService) dispatch(ctx context.Context, u model.ManagedUser, t
 		if err != nil {
 			return u, "", err
 		}
-		s.Enqueue(ctx, "invitation email for user "+u.ID, msg, record)
+		if err := s.Enqueue(ctx, "invitation email for user "+u.ID, msg, record); err != nil {
+			status = EmailFailed
+			record(ctx, status, "mail queue unavailable; resend the invitation")
+		}
 	}
 	u.InviteEmailStatus = &status
 	return u, status, nil
@@ -116,6 +126,9 @@ func (s *InvitationService) Accept(ctx context.Context, token, password string) 
 	email, err := s.store.AcceptInvitation(ctx, digestToken(token), hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrInvitation
+	}
+	if err == nil {
+		audit.Record(ctx, s.Audit, audit.Event{Action: audit.InvitationAccepted, ActorEmail: audit.Ptr(email), TargetEmail: audit.Ptr(email)})
 	}
 	return email, err
 }

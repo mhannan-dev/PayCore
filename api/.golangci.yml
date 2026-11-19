@@ -17,7 +17,22 @@ linters:
     - noctx # outgoing I/O takes a context
     - nilnil # no (nil, nil) returns: return a sentinel error instead
     - gosec # security-sensitive patterns (SQL string building, weak crypto, file perms)
+    - depguard # layering: no Gin below the transport layer (coding rule 24)
   settings:
+    depguard:
+      rules:
+        no-gin-below-transport:
+          files:
+            - "**/internal/service/**/*.go"
+            - "**/internal/repository/**/*.go"
+            - "**/internal/model/**/*.go"
+            - "**/internal/audit/**/*.go"
+            - "**/internal/mailer/**/*.go"
+            - "**/internal/storage/**/*.go"
+            - "**/internal/config/**/*.go"
+          deny:
+            - pkg: "github.com/gin-gonic/gin"
+              desc: "*gin.Context stays in handler/, server/ and middleware/ (docs/coding_rules.md rule 24)"
     exhaustive:
       default-signifies-exhaustive: true
     govet:

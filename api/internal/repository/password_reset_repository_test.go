@@ -5,31 +5,17 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"paycore/api/internal/database"
 	"paycore/api/internal/repository"
-	"paycore/api/migrations"
 )
 
 func TestPasswordResetLifecycle(t *testing.T) {
-	dsn := os.Getenv("DATABASE_TEST_URL")
-	if dsn == "" {
-		t.Skip("set DATABASE_TEST_URL for password reset integration")
-	}
+	pool := isolatedPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pool, err := database.Open(ctx, dsn)
-	if err != nil {
-		t.Fatal("test database unavailable")
-	}
-	defer pool.Close()
-	if err = migrations.Apply(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
 	resets := repository.NewPasswordResetRepository(pool)
 	invites := repository.NewInvitationRepository(pool)
 	email := fmt.Sprintf("reset-%d@example.test", time.Now().UnixNano())

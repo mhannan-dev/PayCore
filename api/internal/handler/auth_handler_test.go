@@ -27,7 +27,7 @@ type testStore struct {
 }
 
 func (s *testStore) FindByEmail(context.Context, string) (model.User, error) { return s.user, nil }
-func (s *testStore) CreateSession(_ context.Context, _ string, hash []byte, _ time.Time) error {
+func (s *testStore) CreateSession(_ context.Context, _ string, _ string, hash []byte, _ time.Time) error {
 	s.hash = append([]byte(nil), hash...)
 	return nil
 }
@@ -65,7 +65,8 @@ func TestLoginHTTPContract(t *testing.T) {
 		router.ServeHTTP(w, r)
 		return w
 	}
-	body := `{"email":"operator@example.test","password":"Sample#h01","captcha_id":"` + strings.Repeat("a", 64) + `","captcha_answer":"12","roles":["ADMIN"]}`
+	body := `{"email":"operator@example.test","password":"Sample#h01","captcha_id":"` + strings.Repeat("a", 64) + `","captcha_answer":"12"}`
+	if w := request("POST", "/api/v1/auth/login", strings.TrimSuffix(body,"}")+`,"roles":["ADMIN"]}`, ""); w.Code != http.StatusBadRequest { t.Fatal("unknown login fields accepted") }
 	if w := request("POST", "/api/v1/auth/login", `{"email":"operator@example.test","password":"anything"}`, ""); w.Code != http.StatusBadRequest {
 		t.Fatal("login without CAPTCHA accepted")
 	}
@@ -142,6 +143,8 @@ func TestUpdateMeHTTPContract(t *testing.T) {
 		t.Fatal("malformed body accepted:", w.Code)
 	}
 	w = request("PATCH", "/api/v1/auth/me", `{"first_name":"Kenji","last_name":"Sato","email":"evil@example.test","roles":["ADMIN"]}`, login.Token)
+	if w.Code != http.StatusBadRequest { t.Fatal("unknown profile fields accepted") }
+	w = request("PATCH", "/api/v1/auth/me", `{"first_name":"Kenji","last_name":"Sato"}`, login.Token)
 	var u model.UserDTO
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &u) != nil {
 		t.Fatal("valid profile update rejected:", w.Code, w.Body.String())

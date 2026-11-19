@@ -48,7 +48,7 @@ func TestUploadFile(t *testing.T) {
 			}
 			request := httptest.NewRequest(http.MethodPost, "/upload", &body)
 			request.Header.Set("Content-Type", writer.FormDataContentType())
-			result, err := helpers.UploadFile(httptest.NewRecorder(), request, files)
+			result, err := helpers.UploadFile(httptest.NewRecorder(), request, files, helpers.NewWebPConverter(2))
 			if tc.errorCode != "" {
 				var validation *helpers.UploadError
 				if !errors.As(err, &validation) || validation.Code != tc.errorCode {
@@ -60,6 +60,9 @@ func TestUploadFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			digest := sha256.Sum256([]byte(tc.content))
+			if !strings.HasSuffix(result.StorageKey, ".png") {
+				t.Fatal("stored upload is missing its original file extension")
+			}
 			if result.FileName != "note.png" || result.ContentType != "text/plain; charset=utf-8" || result.SizeBytes != int64(len(tc.content)) || result.SHA256 != hex.EncodeToString(digest[:]) {
 				t.Fatalf("unexpected upload metadata: %+v", result)
 			}

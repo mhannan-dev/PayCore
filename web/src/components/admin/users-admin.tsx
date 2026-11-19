@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AuthApiError, fetchRoles, resendInvitation, type InvitationResult, type ManagedUser } from "@/lib/auth-api";
+import { AuthApiError, fetchRoles, resendInvitation, setUserActive, type InvitationResult, type ManagedUser } from "@/lib/auth-api";
 import { useAuthSession, validateSession } from "@/lib/auth-session";
 import { notify } from "@/lib/notify";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -12,9 +12,10 @@ import { Pagination } from "../ui/pagination";
 import { roleLabel } from "../user-profile/roles";
 import { AdminStatus } from "./admin-status";
 import { CreateUserDialog } from "./create-user-dialog";
+import { ConfirmDialog } from "./confirm-dialog";
 import { DeleteUserDialog } from "./delete-user-dialog";
 import { RoleEditorDialog } from "./role-editor-dialog";
-import { UsersTable } from "./users-table";
+import { displayName, UsersTable } from "./users-table";
 import { useAdminData } from "./use-admin-data";
 import { useUsersPage } from "./use-users-page";
 import "./admin.css";
@@ -52,6 +53,8 @@ export function UsersAdmin() {
   const [adding, setAdding] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ManagedUser | null>(null);
+  const [deactivating, setDeactivating] = useState<ManagedUser | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const refresh = () => { rolesData.reload(); users.reload(); };
   const heading = (
@@ -110,6 +113,20 @@ export function UsersAdmin() {
     }
   }
 
+  // Deactivation signs the user out, so it asks first; reactivation is harmless.
+  async function toggleActive(user: ManagedUser) {
+    if (user.is_active) return setDeactivating(user);
+    setActivatingId(user.id);
+    try {
+      users.patch(await setUserActive(session.token, user.id, true));
+      notify.success(`${displayName(user)} can sign in again.`);
+    } catch (error) {
+      notify.error(error instanceof AuthApiError ? error.message : "Could not activate the user. Try again.");
+    } finally {
+      setActivatingId(null);
+    }
+  }
+
   const filtered = search !== "" || roleFilter !== "all";
   return (
     <div className="adm-page">
@@ -145,7 +162,7 @@ export function UsersAdmin() {
           {!users.loaded && !users.error ? (
             <div className="adm-status" role="status"><span className="progress-spinner" aria-hidden="true" />Loading users…</div>
           ) : (
-            <UsersTable users={users.users} currentUserId={currentUserId} canEdit={canEdit} resendingId={resendingId} onEdit={setEditing} onResend={resend} onDelete={setDeleting} />
+            <UsersTable users={users.users} currentUserId={currentUserId} canEdit={canEdit} resendingId={resendingId} onEdit={setEditing} onResend={resend} onDelete={setDeleting} onToggleActive={(u) => void toggleActive(u)} activatingId={activatingId} />
           )}
         </div>
         {users.loaded && users.total > 0 && (
@@ -161,6 +178,28 @@ export function UsersAdmin() {
           />
         )}
       </Panel>
+      {deactivating && (
+        <ConfirmDialog
+          key={deactivating.id}
+          title={`Deactivate ${displayName(deactivating)}?`}
+          icon="lock"
+          tone="warning"
+          confirmLabel="Deactivate"
+          pendingLabel="Deactivating…"
+          onClose={() => setDeactivating(null)}
+          onConfirm={async () => {
+            const updated = await setUserActive(session.token, deactivating.id, false);
+            users.patch(updated);
+            setDeactivating(null);
+            notify.success(`${displayName(updated)} was deactivated and signed out everywhere.`);
+          }}
+        >
+          <p>
+            <strong>{deactivating.email}</strong> is signed out on every device and can no longer sign in. Their account,
+            roles and history are kept; you can activate them again at any time.
+          </p>
+        </ConfirmDialog>
+      )}
       {deleting && (
         <DeleteUserDialog
           key={deleting.id}

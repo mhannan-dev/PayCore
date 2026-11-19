@@ -16,7 +16,7 @@
 
 </div>
 
-PayCore is a learning-grade but production-minded fintech core: an append-only double-entry ledger with strict idempotency and deterministic locking, plus the identity, access control and operator tooling around it. Money is always an integer in minor units, every rule that matters is enforced by the database, and both codebases are held to [strict type-safety rules](docs/coding_rules.md).
+PayCore is a learning-grade but production-minded fintech core: an append-only double-entry ledger with strict idempotency and deterministic locking, plus the identity, access control and operator tooling around it. Money is always an integer in minor units, every rule that matters is enforced by the database, and both codebases are held to [strict type-safety and layered-architecture rules](docs/coding_rules.md).
 
 ![PayCore operations console: overview](docs/previews/web-overview.png)
 
@@ -35,7 +35,7 @@ PayCore is a learning-grade but production-minded fintech core: an append-only d
 
 ## Project status
 
-PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core is in progress**: dashboard pages such as Transfers, Ledger and Audit currently show balanced *sample data* and do not call business APIs yet. See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
+PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core** (accounts, transfers, reversals, zero-sum audit) is implemented and drives the Accounts, Transfer studio, Ledger explorer and Invariant audit pages; Overview, Reports, Notifications, Settlements and Simulator still show *sample data*. See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
 
 **Do not use PayCore to move real money.**
 
@@ -45,18 +45,20 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 
 - **Email and password sign-in** with a server-generated math CAPTCHA, bcrypt hashing, and revocable bearer sessions (only token hashes are stored).
 - **Role-based access control:** 5 roles and 12 fine-grained permissions, enforced by the API on every request and reflected in the UI (navigation, page guards, controls).
-- **User management:** paginated, searchable user list; invite users by email; edit roles; delete users with "last administrator" and "not yourself" safeguards.
+- **User management:** paginated, searchable user list; invite users by email; edit roles; deactivate, reactivate or delete users, with "last administrator" and "not yourself" safeguards.
+- **Audit log:** append-only record of sign-ins and account administration (actor, target, before/after roles, IP); the database refuses edits and deletes, and admin changes are recorded in the same transaction.
 - **Email invitations and forgot password:** single-use, hashed, expiring links; background delivery with retries and a per-invitation delivery record; enumeration-safe reset requests.
 - **SMTP mailer:** enforced STARTTLS or implicit TLS, AUTH PLAIN or LOGIN (works with Microsoft 365), local Mailpit inbox for development.
 - **Profiles and attachments:** editable names, profile photos, validated uploads stored outside the web root.
 - **Operations console:** responsive Next.js dashboard with an animated preloader, toast notifications and sticky navigation.
 - **Engineering hygiene:** versioned SQL migrations, standard JSON error envelope, hot reload, and Postgres integration tests.
 
+- **Double-entry ledger:** chart of accounts with derived balances, balanced transfers, full reversals and a live zero-sum audit. The database itself rejects unbalanced journals, edits, deletes and late postings; accounts are locked in a fixed order with overdraft checks; every write is idempotent per `Idempotency-Key` and records an outbox event in the same transaction ([docs/ledger.md](docs/ledger.md)).
+
 **Planned** (see [ProjectFeature.md](ProjectFeature.md))
 
-- Append-only double-entry ledger with database-enforced zero-sum journals.
-- Multi-tier idempotency keys and deterministic lock ordering.
-- Reversals, the transactional outbox, and Reporting, Notification and Settlement services.
+- Outbox relay to a message broker, optional Redis idempotency cache.
+- Reporting, Notification and Settlement services.
 
 ## Architecture
 
@@ -235,7 +237,7 @@ go test ./...
 golangci-lint run          # config in api/.golangci.yml
 ```
 
-All changes follow the [type-safety coding rules](docs/coding_rules.md). The local database password above is a development-only default from `compose.yaml`; never reuse it anywhere else.
+All changes follow the [coding rules](docs/coding_rules.md): type safety, thin handlers, dependency injection with consumer-side interfaces, and centralized error handling. The local database password above is a development-only default from `compose.yaml`; never reuse it anywhere else.
 
 ## Documentation
 
@@ -244,6 +246,7 @@ All changes follow the [type-safety coding rules](docs/coding_rules.md). The loc
 | Product specification and roadmap | [ProjectFeature.md](ProjectFeature.md) |
 | Coding rules (type safety) | [docs/coding_rules.md](docs/coding_rules.md) |
 | Database setup | [docs/database_setup.md](docs/database_setup.md) |
+| Ledger core (accounts, transfers, reversals, idempotency) | [docs/ledger.md](docs/ledger.md) |
 | Authentication | [docs/email_login.md](docs/email_login.md) |
 | RBAC, users, invitations, password reset, email | [docs/rbac.md](docs/rbac.md) |
 | Attachments | [docs/attachments.md](docs/attachments.md) |

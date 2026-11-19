@@ -43,6 +43,7 @@ func DefaultPermissions() []PermissionDefinition {
 		{Code: model.PermReportsExport, Name: "Export Reports", Description: "Export compliance and transaction reports"},
 		{Code: model.PermSimulatorRun, Name: "Run Simulator", Description: "Execute idempotency and load simulation tools"},
 		{Code: model.PermSystemRead, Name: "Read System Status", Description: "View system health, database, and broker metrics"},
+		{Code: model.PermAccountsWrite, Name: "Manage Accounts", Description: "Create ledger accounts in the chart of accounts"},
 	}
 }
 
@@ -56,8 +57,10 @@ func DefaultRolePermissions() map[string][]string {
 			model.PermReportsRead, model.PermReportsExport,
 			model.PermSimulatorRun,
 			model.PermSystemRead,
+			model.PermAccountsWrite,
 		},
 		model.RoleLeadOperator: {
+			model.PermAccountsWrite,
 			model.PermUsersRead,
 			model.PermTransfersRead, model.PermTransfersCreate, model.PermTransfersReverse,
 			model.PermLedgerRead,

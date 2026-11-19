@@ -73,7 +73,7 @@ func (r *InvitationRepository) ReissueInvitation(ctx context.Context, userID str
 
 	var passwordSet bool
 	if err := tx.QueryRow(ctx, "SELECT password_hash IS NOT NULL FROM users WHERE id = $1 FOR UPDATE", userID).Scan(&passwordSet); err != nil {
-		return model.ManagedUser{}, err
+		return model.ManagedUser{}, notFound(err, ErrUserNotFound)
 	}
 	if passwordSet {
 		return model.ManagedUser{}, ErrAlreadyActivated

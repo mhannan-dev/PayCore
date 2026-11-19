@@ -22,6 +22,10 @@ type Props = {
   onEdit: (user: ManagedUser) => void;
   onResend: (user: ManagedUser) => void;
   onDelete: (user: ManagedUser) => void;
+  /** Deactivate an active user or reactivate a disabled one. */
+  onToggleActive: (user: ManagedUser) => void;
+  /** ID of the user being activated, if any. */
+  activatingId: string | null;
 };
 
 type Status = { label: string; tone: BadgeTone; title?: string };
@@ -55,7 +59,7 @@ function EmailDelivery({ user }: { user: ManagedUser }) {
   }
 }
 
-export function UsersTable({ users, currentUserId, canEdit, resendingId, onEdit, onResend, onDelete }: Props) {
+export function UsersTable({ users, currentUserId, canEdit, resendingId, onEdit, onResend, onDelete, onToggleActive, activatingId }: Props) {
   if (users.length === 0) return <EmptyHint icon="users" title="No matching users" text="Try a different name, email or role filter." />;
   return (
     <div className="table-scroll">
@@ -98,6 +102,18 @@ export function UsersTable({ users, currentUserId, canEdit, resendingId, onEdit,
                       <button type="button" className="button secondary adm-edit-btn" onClick={() => onEdit(user)} aria-label={`Edit roles for ${name}`}>
                         <Icon name="edit" size={14} /> Edit roles
                       </button>
+                      {!self && (
+                        <button
+                          type="button"
+                          className={`button secondary adm-edit-btn ${user.is_active ? "adm-deactivate-btn" : "adm-activate-btn"}`}
+                          onClick={() => onToggleActive(user)}
+                          disabled={activatingId === user.id}
+                          aria-label={`${user.is_active ? "Deactivate" : "Activate"} ${name}`}
+                        >
+                          <Icon name={user.is_active ? "lock" : "checkCircle"} size={14} />
+                          {user.is_active ? "Deactivate" : activatingId === user.id ? "Activating…" : "Activate"}
+                        </button>
+                      )}
                       {!self && (
                         <button type="button" className="button secondary adm-edit-btn adm-delete-btn" onClick={() => onDelete(user)} aria-label={`Delete ${name}`} title="Delete user">
                           <Icon name="trash" size={14} /> Delete
