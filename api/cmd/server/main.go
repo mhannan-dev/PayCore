@@ -115,7 +115,7 @@ func main() {
 		db = pool
 		log.Println("PostgreSQL connection verified; connection pool ready")
 	}
-	router := server.New(db, registeredControllers)
+	router := server.NewContainer(registeredControllers).Router(db)
 
 	// If -routes flag is provided, print route table and exit
 	if *listRoutes {

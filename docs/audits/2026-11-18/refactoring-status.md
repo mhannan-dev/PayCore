@@ -20,6 +20,9 @@ resource-control findings from the backend audit. It does not close every findin
   before reading the image into memory.
 - JSON binding rejects unknown fields and trailing JSON documents while retaining
   binding-tag validation and endpoint body limits.
+- Gin HTTP abstractions remain thin: route groups use declarative route
+  registration, global middleware uses an ordered stack, and the composition
+  root passes explicitly wired controllers through a container wrapper.
 - Access logs use structured fields, request IDs and route templates, excluding
   raw URLs and query strings. Unexpected handler errors produce a generic 500;
   explicitly unconfigured dependencies retain their route-specific response.

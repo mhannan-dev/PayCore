@@ -12,7 +12,8 @@ api/tests/
 │   ├── controllers/
 │   ├── middleware/
 │   ├── requests/
-│   └── responses/
+│   ├── responses/
+│   └── routing/
 ├── models/
 ├── repositories/
 ├── server/

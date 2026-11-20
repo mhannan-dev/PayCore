@@ -58,6 +58,17 @@ func TestLivenessDoesNotRequireDatabase(t *testing.T) {
 	}
 }
 
+func TestContainerBuildsRouter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	container := server.NewContainer(server.Controllers{})
+	r := container.Router(nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d, want 200", w.Code)
+	}
+}
+
 func TestAuthRateLimitIgnoresUntrustedForwardedIP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := server.SetupRouter(nil)

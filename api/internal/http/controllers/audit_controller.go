@@ -6,11 +6,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gin-gonic/gin"
 	"paycore/api/internal/apperr"
 	"paycore/api/internal/audit"
 	"paycore/api/internal/http/responses"
 	"paycore/api/internal/repositories"
+
+	"github.com/gin-gonic/gin"
 )
 
 // AuditLog pages the audit trail (implemented by repositories.AuditRepository;

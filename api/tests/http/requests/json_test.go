@@ -35,3 +35,18 @@ func TestBindJSONRejectsAmbiguousPayloads(t *testing.T) {
 		})
 	}
 }
+
+func TestBindJSONMaxBytesRejectsOversizedBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":"a@b.test","padding":"too much"}`))
+
+	var request struct {
+		Email   string `json:"email" binding:"required,email"`
+		Padding string `json:"padding"`
+	}
+	err := requests.BindJSONMaxBytes(c, &request, 20)
+	if err == nil {
+		t.Fatal("oversized JSON body was accepted")
+	}
+}

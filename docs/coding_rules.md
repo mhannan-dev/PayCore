@@ -91,7 +91,8 @@ api/
     │   ├── controllers/         request validation, service calls and responses
     │   ├── middleware/          errors, request IDs, rate limiting and logging
     │   ├── requests/            strict JSON binding and transport validation helpers
-    │   └── responses/           JSON response helpers and error envelopes
+    │   ├── responses/           JSON response helpers and error envelopes
+    │   └── routing/             declarative Gin route-group registration helpers
     ├── server/                  HTTP engine, global middleware and error mapping
     ├── services/                business rules and use-case orchestration
     ├── repositories/            SQL queries and transactions
@@ -112,12 +113,14 @@ Routes belong in `api/routes/<resource>.go`, not in controllers. `server.New` mo
 
 Shared request/response DTOs stay in `internal/models` so services never depend on `internal/http/requests`. Controllers use `requests.BindJSON` for HTTP parsing; service validation remains transport-independent.
 
+Route files may use `internal/http/routing` for declarative route-group registration. Routing helpers remain thin and must not contain business rules or service construction. `server.Container` is an explicit composition-root wrapper, not a runtime dependency-injection container; it receives already-wired controllers. `server.MiddlewareStack` only orders global Gin middleware.
+
 ### How the pieces fit (reference implementation)
 
 - **Errors:** controllers call `fail(c, err)` (`internal/http/controllers/guard.go`); `middleware.Errors` (`internal/http/middleware/errors.go`) resolves it with `server.ErrorTable` (`internal/server/errors.go`); each route group sets its fallback with `middleware.ErrorFallback`. Request-shape errors use `apperr.BadRequest(...)` directly in the controllers.
 - **Not found:** repositories return named sentinels (`repositories.ErrUserNotFound`, `ErrAttachmentNotFound`) that wrap `pgx.ErrNoRows`; a bare `pgx.ErrNoRows` is never mapped to HTTP.
 - **Authentication:** one shared `controllers.Guard` (`Session()`, `Require(permission)`) sets the caller and the audit actor.
-- **Wiring:** `cmd/server/main.go` builds `server.Controllers` and calls `server.New`; controllers depend only on interfaces such as `controllers.UserAdmin`, `controllers.AuthService`, `controllers.PasswordResets`.
+- **Wiring:** `cmd/server/main.go` builds `server.Controllers`, wraps it in `server.NewContainer`, and calls `Container.Router`; controllers depend only on interfaces such as `controllers.UserAdmin`, `controllers.AuthService`, `controllers.PasswordResets`.
 - **Request IDs:** every response carries `X-Request-ID`, which also prefixes logged server errors.
 
 ## Adding an exception

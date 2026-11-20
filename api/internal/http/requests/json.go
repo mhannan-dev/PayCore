@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -24,4 +25,10 @@ func BindJSON[T any](c *gin.Context, destination *T) error {
 		return errTrailingJSON
 	}
 	return binding.Validator.ValidateStruct(destination)
+}
+
+// BindJSONMaxBytes applies a request-size limit before binding and validating JSON.
+func BindJSONMaxBytes[T any](c *gin.Context, destination *T, maxBytes int64) error {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+	return BindJSON(c, destination)
 }

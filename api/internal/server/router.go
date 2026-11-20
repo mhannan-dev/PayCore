@@ -32,26 +32,29 @@ func New(db DatabasePinger, h Controllers) *gin.Engine {
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
 
-	r.Use(middleware.RequestID())
-	r.Use(middleware.AccessLog())
+	stack := NewMiddlewareStack(
+		middleware.RequestID(),
+		middleware.AccessLog(),
+	)
 	// Panics are logged by gin and answered with the standard JSON error envelope.
-	r.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
+	stack.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
 		c.Abort()
 		responses.InternalError(c)
 	}))
-	// Unknown routes and wrong methods get JSON too, not gin's plain-text defaults.
-	r.HandleMethodNotAllowed = true
-	r.NoRoute(responses.RouteNotFound)
-	r.NoMethod(responses.MethodNotAllowed)
-
-	r.Use(corsMiddleware())
+	stack.Use(corsMiddleware())
 	// Audit events record where each request came from.
-	r.Use(func(c *gin.Context) {
+	stack.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(audit.WithMeta(c.Request.Context(), audit.Meta{IP: c.ClientIP(), UserAgent: c.Request.UserAgent()}))
 		c.Next()
 	})
 	// Every error passed to c.Error becomes a response here (coding rule 26).
-	r.Use(middleware.Errors(ErrorTable))
+	stack.Use(middleware.Errors(ErrorTable))
+	stack.Apply(r)
+
+	// Unknown routes and wrong methods get JSON too, not gin's plain-text defaults.
+	r.HandleMethodNotAllowed = true
+	r.NoRoute(responses.RouteNotFound)
+	r.NoMethod(responses.MethodNotAllowed)
 
 	registerHealthRoutes(r, db)
 

@@ -83,7 +83,7 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 .
 ├── api/                 Go API
 │   ├── cmd/             server, seed-users, create-user, grant-system-admin, mail-check
-│   ├── internal/        http/{controllers,middleware,requests,responses}, models, services, repositories, …
+│   ├── internal/        http/{controllers,middleware,requests,responses,routing}, models, services, repositories, database, server, …
 │   ├── database/        migrations (embedded SQL) and seeders
 │   └── routes/          per-resource API routes, middleware and permissions
 ├── web/                 Next.js console (src/app routes, src/components, src/lib)
