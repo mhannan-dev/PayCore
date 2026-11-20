@@ -1,0 +1,3 @@
+booked_date,reference,currency,amount,direction,description
+2026-11-20,BANK-001,USD,1250.00,CREDIT,Customer receipt
+2026-11-20,BANK-002,USD,15.50,DEBIT,Bank fee

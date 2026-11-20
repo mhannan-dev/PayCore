@@ -105,9 +105,9 @@ func rbacRouterWithInvites(t *testing.T, caller model.User) (*testRouter, *rbacS
 	}}
 	invites := &inviteStore{taken: map[string]bool{"member@example.test": true}}
 	mail := &captureMail{}
-	svc := service.NewInvitationService(invites, service.NewMailOutbox(mail, service.MailOptions{RetryDelays: []time.Duration{time.Millisecond, time.Millisecond}}), "http://web.test/")
+	svc := service.NewInvitationService(invites, true, "http://web.test/")
 
-	invites.svc = svc
+	invites.worker = service.NewEmailWorker(invites, mail)
 	guard := handler.NewGuard(auth)
 	r := server.New(nil, server.Handlers{
 		Auth:        handler.NewAuthHandler(auth, nil),
@@ -213,7 +213,8 @@ func TestMeIncludesPermissions(t *testing.T) {
 
 // inviteStore is an in-memory InvitationStore.
 type inviteStore struct {
-	svc       *service.InvitationService
+	worker    *service.EmailWorker
+	jobs      []model.EmailJob
 	emailMu   sync.Mutex
 	emails    []string
 	taken     map[string]bool
@@ -222,7 +223,7 @@ type inviteStore struct {
 	activated map[string]bool
 }
 
-func (s *inviteStore) CreateInvitedUser(_ context.Context, first string, last *string, email string, roles []string, digest []byte, expires time.Time, by string) (model.ManagedUser, error) {
+func (s *inviteStore) CreateInvitedUser(_ context.Context, first string, last *string, email string, roles []string, digest []byte, expires time.Time, by string, drafts ...model.EmailDraft) (model.ManagedUser, error) {
 	if s.taken[email] {
 		return model.ManagedUser{}, repository.ErrEmailTaken
 	}
@@ -231,10 +232,13 @@ func (s *inviteStore) CreateInvitedUser(_ context.Context, first string, last *s
 	}
 	s.tokens[hex.EncodeToString(digest)] = email
 	u := model.ManagedUser{ID: "44444444-4444-4444-8444-444444444444", FirstName: first, LastName: last, Email: email, Roles: roles, IsActive: true, InviteExpiresAt: &expires}
+	if err := s.saveEmail(u, drafts); err != nil {
+		return model.ManagedUser{}, err
+	}
 	s.created = append(s.created, u)
 	return u, nil
 }
-func (s *inviteStore) ReissueInvitation(_ context.Context, id string, digest []byte, expires time.Time, by string) (model.ManagedUser, error) {
+func (s *inviteStore) ReissueInvitation(_ context.Context, id string, digest []byte, expires time.Time, by string, drafts ...model.EmailDraft) (model.ManagedUser, error) {
 	if id == adminID {
 		return model.ManagedUser{}, repository.ErrAlreadyActivated
 	}
@@ -242,7 +246,11 @@ func (s *inviteStore) ReissueInvitation(_ context.Context, id string, digest []b
 		return model.ManagedUser{}, repository.ErrUserNotFound
 	}
 	s.tokens = map[string]string{hex.EncodeToString(digest): "member@example.test"}
-	return model.ManagedUser{ID: id, FirstName: "Member", Email: "member@example.test", InviteExpiresAt: &expires}, nil
+	u := model.ManagedUser{ID: id, FirstName: "Member", Email: "member@example.test", InviteExpiresAt: &expires}
+	if err := s.saveEmail(u, drafts); err != nil {
+		return model.ManagedUser{}, err
+	}
+	return u, nil
 }
 func (s *inviteStore) FindInvitation(_ context.Context, digest []byte) (model.InvitationInfo, error) {
 	email, ok := s.tokens[hex.EncodeToString(digest)]
@@ -266,19 +274,20 @@ func (s *inviteStore) AcceptInvitation(ctx context.Context, digest []byte, hash 
 	return info.Email, nil
 }
 
-func (s *inviteStore) RecordEmail(_ context.Context, _ []byte, status, _ string) error {
-	s.emailMu.Lock()
-	defer s.emailMu.Unlock()
-	s.emails = append(s.emails, status)
-	return nil
-}
-
 // settle waits for background invitation emails and returns the recorded statuses.
 func (s *inviteStore) settle(t *testing.T) []string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	s.svc.Wait(ctx)
+	for i := 0; i < 6; i++ {
+		err := s.worker.RunOne(ctx)
+		if errors.Is(err, model.ErrNoEmailJob) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	s.emailMu.Lock()
 	defer s.emailMu.Unlock()
 	return append([]string(nil), s.emails...)
@@ -384,8 +393,8 @@ func TestRBACInviteReportsEmailFailure(t *testing.T) {
 	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"email_status":"pending"`) || len(invites.created) != 1 {
 		t.Fatalf("send failure: %d %s", w.Code, w.Body)
 	}
-	// Three attempts (two retries), then recorded as failed; the account still exists.
-	if got := invites.settle(t); strings.Join(got, ",") != "pending,pending,failed" {
+	// Five attempts, then recorded as failed; the account still exists.
+	if got := invites.settle(t); strings.Join(got, ",") != "pending,pending,pending,pending,failed" {
 		t.Fatalf("recorded delivery: %v", got)
 	}
 }
@@ -526,4 +535,32 @@ func TestAuditEventsEndpoint(t *testing.T) {
 	if w := noAudit.do(http.MethodGet, "/api/v1/audit/events", "", token2); w.Code != http.StatusForbidden {
 		t.Fatalf("without audit:read: %d", w.Code)
 	}
+}
+
+func (s *inviteStore) saveEmail(u model.ManagedUser, drafts []model.EmailDraft) error {
+	if len(drafts) == 0 || drafts[0] == nil {
+		return nil
+	}
+	content, err := drafts[0](model.EmailRecipient{ID: u.ID, FirstName: u.FirstName, Email: u.Email})
+	if err != nil {
+		return err
+	}
+	s.jobs = append(s.jobs, model.EmailJob{ID: u.ID, Kind: model.EmailInvitation, Content: content, ExpiresAt: time.Now().Add(time.Hour)})
+	return nil
+}
+func (s *inviteStore) Claim(context.Context) (model.EmailJob, error) {
+	if len(s.jobs) == 0 {
+		return model.EmailJob{}, model.ErrNoEmailJob
+	}
+	job := s.jobs[0]
+	s.jobs = s.jobs[1:]
+	job.Attempts++
+	return job, nil
+}
+func (s *inviteStore) Complete(_ context.Context, job model.EmailJob, result model.EmailOutcome) error {
+	s.emails = append(s.emails, string(result.Status))
+	if result.Status == model.EmailQueued {
+		s.jobs = append(s.jobs, job)
+	}
+	return nil
 }

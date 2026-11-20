@@ -76,3 +76,7 @@ Errors: `400 invalid_transfer` / `unbalanced_transfer` / `idempotency_key_requir
 - The outbox relay (publishing `outbox_events` to a broker) and `GET /outbox/metrics`.
 - Optional Redis tier for idempotency (PostgreSQL is the source of truth).
 - Cursor pagination for postings (offset pagination is used for now), account deactivation and editing, partial reversals.
+
+## Statement intake
+
+The Reconciliation page supports CSV upload, validation preview, duplicate detection, private statement history, exact matching suggestions, and exception review. See [statement reconciliation](reconciliation.md) for the CSV format, matching rules, permissions, endpoints, and retention policy. Confirmation links one statement row to one existing posting; reconciliation never changes ledger balances.

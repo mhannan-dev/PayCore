@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/internal/model"
 )
 
 // Not-found errors name what was missing, so the HTTP layer can answer
@@ -12,7 +13,7 @@ import (
 // errors.Is(err, pgx.ErrNoRows) still holds for existing callers.
 var (
 	ErrUserNotFound       = fmt.Errorf("user not found: %w", pgx.ErrNoRows)
-	ErrAttachmentNotFound = fmt.Errorf("attachment not found: %w", pgx.ErrNoRows)
+	ErrAttachmentNotFound = fmt.Errorf("%w: %w", model.ErrAttachmentNotFound, pgx.ErrNoRows)
 )
 
 // notFound replaces a bare pgx.ErrNoRows with sentinel; other errors pass through.

@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -13,17 +14,20 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"mime/multipart"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/HugoSmits86/nativewebp"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
+	"paycore/api/internal/model"
 	"paycore/api/internal/storage"
 )
+
+type UploadedFile struct {
+	FileName, ContentType, StorageKey, SHA256 string
+	SizeBytes                                 int64
+}
 
 func uploadImageFixture(t *testing.T, filename string, data []byte) (UploadedFile, []byte, error) {
 	t.Helper()
@@ -32,24 +36,16 @@ func uploadImageFixture(t *testing.T, filename string, data []byte) (UploadedFil
 		t.Fatal(err)
 	}
 	defer files.Close()
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", filename)
+
+	prepared, err := PrepareUpload(context.Background(), model.AttachmentUpload{FileName: filename, Content: bytes.NewReader(data)}, NewWebPConverter(2))
 	if err != nil {
-		t.Fatal(err)
+		return UploadedFile{}, nil, err
 	}
-	if _, err = part.Write(data); err != nil {
-		t.Fatal(err)
-	}
-	if err = writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r := httptest.NewRequest(http.MethodPost, "/upload", &body)
-	r.Header.Set("Content-Type", writer.FormDataContentType())
-	result, err := UploadFile(httptest.NewRecorder(), r, files, NewWebPConverter(2))
+	key, hash, size, err := files.Save(prepared.Content, prepared.FileName)
 	if err != nil {
-		return result, nil, err
+		return UploadedFile{}, nil, err
 	}
+	result := UploadedFile{FileName: prepared.FileName, ContentType: prepared.ContentType, StorageKey: key, SHA256: hash, SizeBytes: size}
 	file, err := files.Open(result.StorageKey)
 	if err != nil {
 		t.Fatal(err)
@@ -159,8 +155,8 @@ func TestInvalidImagesRejectedBeforeSaving(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := uploadImageFixture(t, tc.name, tc.data)
-			var validation *UploadError
-			if !errors.As(err, &validation) || validation.Code != tc.code {
+			var validation *model.UploadError
+			if !errors.As(err, &validation) || string(validation.Code) != tc.code {
 				t.Fatalf("got %v, want %s", err, tc.code)
 			}
 		})

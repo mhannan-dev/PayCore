@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef } from "react";
+import { PERMISSIONS } from "@/lib/rbac";
+import { Can } from "../can";
 import { Icon } from "../icons";
 import { UserAvatar } from "../user-avatar";
 import { RoleChips } from "./roles";
@@ -23,9 +25,11 @@ export function ProfileHero({ name, email, roles, hasPhoto }: Props) {
             <UserAvatar />
             {busy && <span className="pf-avatar-spinner" aria-hidden="true"><span className="progress-spinner" /></span>}
           </span>
-          <button type="button" className="pf-camera" onClick={photo.pick} disabled={busy} aria-label={hasPhoto ? "Change profile photo" : "Upload profile photo"} title={hasPhoto ? "Change photo" : "Upload photo"}>
-            <Icon name="camera" size={15} />
-          </button>
+          <Can permission={PERMISSIONS.attachmentsWrite}>
+            <button type="button" className="pf-camera" onClick={photo.pick} disabled={busy} aria-label={hasPhoto ? "Change profile photo" : "Upload profile photo"} title={hasPhoto ? "Change photo" : "Upload photo"}>
+              <Icon name="camera" size={15} />
+            </button>
+          </Can>
         </div>
 
         <div className="pf-identity">
@@ -34,32 +38,36 @@ export function ProfileHero({ name, email, roles, hasPhoto }: Props) {
           <RoleChips roles={roles} />
         </div>
 
-        <div className="pf-hero-actions">
-          <div className="pf-action-row">
-            <button type="button" className="button secondary pf-btn" onClick={photo.pick} disabled={busy}>
-              <Icon name="upload" size={15} />
-              {photo.busy === "uploading" ? "Uploading…" : hasPhoto ? "Change photo" : "Upload photo"}
-            </button>
-            {hasPhoto && (
-              <button type="button" className="button pf-btn pf-btn-danger" onClick={photo.remove} disabled={busy}>
-                <Icon name="trash" size={15} />
-                {photo.busy === "removing" ? "Removing…" : "Remove"}
+        <Can permission={PERMISSIONS.attachmentsWrite}>
+          <div className="pf-hero-actions">
+            <div className="pf-action-row">
+              <button type="button" className="button secondary pf-btn" onClick={photo.pick} disabled={busy}>
+                <Icon name="upload" size={15} />
+                {photo.busy === "uploading" ? "Uploading…" : hasPhoto ? "Change photo" : "Upload photo"}
               </button>
-            )}
+              {hasPhoto && (
+                <button type="button" className="button pf-btn pf-btn-danger" onClick={photo.remove} disabled={busy}>
+                  <Icon name="trash" size={15} />
+                  {photo.busy === "removing" ? "Removing…" : "Remove"}
+                </button>
+              )}
+            </div>
+            <small className="pf-hint">Up to 10 MB · images are saved as WebP</small>
           </div>
-          <small className="pf-hint">Up to 10 MB · images are saved as WebP</small>
-        </div>
+        </Can>
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept={PHOTO_TYPES.join(",")}
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(e) => photo.onFileChange(e.target.files?.[0])}
-      />
+      <Can permission={PERMISSIONS.attachmentsWrite}>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={PHOTO_TYPES.join(",")}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => photo.onFileChange(e.target.files?.[0])}
+        />
+      </Can>
     </section>
   );
 }

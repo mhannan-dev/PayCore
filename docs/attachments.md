@@ -43,7 +43,7 @@ The table records ID, owner, display filename, server-detected MIME type, byte s
 
 ## Endpoints
 
-Every request requires the real backend bearer token. Owner IDs are taken from that session, not client input. Even ADMIN does not automatically gain access to another user's files.
+Every request requires the real backend bearer token and an explicit capability: `attachments:read` for listing/metadata/download/photo bytes, `attachments:write` for upload/photo assignment or clearing, and `attachments:delete` for deletion. Migration 016 grants these own-file capabilities to all five built-in roles. Owner IDs are taken from the session, not client input. Even ADMIN does not automatically gain access to another user's files. Missing permission returns `403`; an inaccessible or other-user attachment still returns `404` once the caller has the route's capability.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -71,11 +71,36 @@ Invoke-RestMethod -Uri 'http://localhost:8080/api/v1/auth/photo' `
 
 Clear a photo using `{"attachment_id":null}`. Assigning a photo does not delete the previous attachment. `/auth/me` returns `photo_attachment_id` and a backward-compatible `photo` URL. Local photo URLs require Authorization; a browser must fetch the bytes with its token and display a blob URL, or use an authenticated proxy. A bare `<img src>` cannot attach the bearer header. The frontend upload/gallery controls are not implemented by this backend change.
 
+## Service boundary and upload failures
+
+`AttachmentHandler` handles multipart parsing, request limits, UUID/pagination
+validation and response headers. It calls an injected `AttachmentService` for
+upload, listing, metadata, download, deletion and photo-content workflows. The
+service receives `context.Context`, a session-derived owner and plain stream/model
+values; it has no Gin dependency. `PhotoService` owns profile-photo assignment.
+`helpers.PrepareUpload` and the injected WebP converter handle filename, MIME and
+image validation without selecting HTTP status codes. The central error table
+maps typed upload errors to the existing response codes.
+
+Storage is injected through `Write`, `Read` and `Remove` interfaces. Download
+ownership and local-file/photo policy are checked before opening any bytes. The
+service checks the opened file's size against metadata; failed validation closes
+the stream, while successful downloads transfer closing responsibility to the
+handler. Soft deletion keeps the existing retention policy.
+
+Attachment creation uses an explicit database transaction. If metadata creation
+definitely fails, the service removes the newly stored file using a fresh cleanup
+context with a five-second deadline, even if the request was canceled. Cleanup
+failures preserve both error causes for server-side handling. An uncertain commit
+acknowledgement is marked explicitly and retains the bytes: deleting them could
+break metadata that actually committed. Process crashes, cleanup failures and
+uncertain commits still require orphan reconciliation.
+
 ## Migration and retention
 
 Migration 007 creates the table, imports any old `users.photo` strings as `EXTERNAL` attachment records, links those IDs, then removes the old photo column. External URLs are preserved as metadata and are never fetched by the server. Their size is reported as 0 (unknown); there is no local checksum or storage key. Legacy external downloads return `409` rather than proxying remote content.
 
-Deletion is logical: metadata gets `deleted_at`, listing/downloading excludes it, and the user's photo link is cleared in the same database transaction. File bytes remain on disk until a separately implemented retention/purge job removes them. Local disk and PostgreSQL cannot commit atomically: files are saved before metadata; a process crash or uncertain database write can leave an unreferenced file. Such files are retained rather than risking deletion of an acknowledged-lost database commit. Orphan reconciliation, quotas, malware scanning, and physical purge are not implemented.
+Deletion is logical: metadata gets `deleted_at`, listing/downloading excludes it, and the user's photo link is cleared in the same database transaction. File bytes remain on disk until a separately implemented retention/purge job removes them. Local disk and PostgreSQL cannot commit atomically: files are saved before metadata. Definite metadata failures trigger cleanup; process crashes, failed cleanup or uncertain commits can still leave an unreferenced file. Orphan reconciliation, quotas, malware scanning, and physical purge are not implemented. This service extraction requires no new migration or endpoint change.
 
 ## Verify
 
@@ -86,4 +111,4 @@ $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/pa
 go test ./internal/handler -run TestAttachmentsIntegration -v
 ```
 
-The integration test uses a temporary database schema and upload directory. It exercises real sessions, uploads, downloads, owner isolation, photo validation/linking/clearing, and soft deletion without leaving test files or users in the project database.
+The integration test uses a temporary database schema and upload directory. It exercises real sessions, uploads, downloads, owner isolation, photo validation/linking/clearing, soft deletion, validation responses and cleanup after an actual database rejection. Service tests cover canceled-request cleanup, cleanup failures, uncertain commits, unauthorized access, image-conversion rejection and closing streams after failed download validation.

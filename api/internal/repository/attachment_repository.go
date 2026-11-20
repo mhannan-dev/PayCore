@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +24,26 @@ func scanAttachment(row scanner) (a model.Attachment, err error) {
 	return
 }
 func (r *AttachmentRepository) Create(ctx context.Context, a model.Attachment) (model.Attachment, error) {
-	return scanAttachment(r.pool.QueryRow(ctx, "INSERT INTO attachments (owner_user_id, file_name, content_type, size_bytes, sha256, storage_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+attachmentColumns, a.OwnerUserID, a.FileName, a.ContentType, a.SizeBytes, a.SHA256, a.StorageKey))
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return model.Attachment{}, err
+	}
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+	created, err := scanAttachment(tx.QueryRow(ctx, "INSERT INTO attachments (owner_user_id, file_name, content_type, size_bytes, sha256, storage_key) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+attachmentColumns, a.OwnerUserID, a.FileName, a.ContentType, a.SizeBytes, a.SHA256, a.StorageKey))
+	if err != nil {
+		return model.Attachment{}, err
+	} // No COMMIT was issued; cleanup is safe.
+	if err = tx.Commit(ctx); err != nil {
+		if errors.Is(err, pgx.ErrTxCommitRollback) {
+			return model.Attachment{}, err
+		}
+		return model.Attachment{}, fmt.Errorf("%w: %w", model.ErrAttachmentCommitUnknown, err)
+	}
+	return created, nil
 }
 func (r *AttachmentRepository) Get(ctx context.Context, owner, id string) (model.Attachment, error) {
 	a, err := scanAttachment(r.pool.QueryRow(ctx, "SELECT "+attachmentColumns+" FROM attachments WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL", id, owner))

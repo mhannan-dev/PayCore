@@ -35,21 +35,41 @@ type AuthStore interface {
 }
 
 type CaptchaVerifier interface{ Verify(string, string) bool }
+type LoginMFA interface {
+	Begin(context.Context, model.User) (model.MFAChallengeResponse, bool, error)
+}
 type AuthService struct {
-	store     AuthStore
-	captcha   CaptchaVerifier
-	dummyHash []byte
+	mfaDisabled bool
+	mfa         LoginMFA
+	store       AuthStore
+	captcha     CaptchaVerifier
+	dummyHash   []byte
 	// Audit, when set, records sign-ins (successful and failed) and sign-outs.
 	Audit audit.Recorder
 }
 
-func NewAuthService(store AuthStore, captcha CaptchaVerifier) (*AuthService, error) {
+func NewAuthService(store AuthStore, captcha CaptchaVerifier, secondFactor ...LoginMFA) (*AuthService, error) {
 	// Perform the same password KDF for unknown and known emails.
 	dummy, err := bcrypt.GenerateFromPassword([]byte("unused-dummy-password-for-unknown-users"), PasswordCost)
 	if err != nil {
 		return nil, err
 	}
-	return &AuthService{store: store, captcha: captcha, dummyHash: dummy}, nil
+	var mfa LoginMFA
+	if len(secondFactor) > 0 {
+		mfa = secondFactor[0]
+	}
+	return &AuthService{store: store, captcha: captcha, dummyHash: dummy, mfa: mfa}, nil
+}
+
+// NewAuthServiceWithMFAPolicy allows an explicit deployment-wide pause. Normal
+// constructors enforce MFA; disabling it never marks password sessions verified.
+func NewAuthServiceWithMFAPolicy(store AuthStore, captcha CaptchaVerifier, factor LoginMFA, enabled bool) (*AuthService, error) {
+	s, err := NewAuthService(store, captcha, factor)
+	if err != nil {
+		return nil, err
+	}
+	s.mfaDisabled = !enabled
+	return s, nil
 }
 
 // PasswordLength is the exact number of characters (Unicode code points) a new
@@ -91,6 +111,20 @@ func (s *AuthService) Login(ctx context.Context, req model.LoginRequest) (model.
 	if err != nil || u.PasswordHash == "" || match != nil || !u.IsActive {
 		s.recordLoginFailure(ctx, req.Email, u, err == nil, match == nil)
 		return model.LoginResponse{}, ErrCredentials
+	}
+	if !s.mfaDisabled && s.mfa != nil {
+		challenge, required, err := s.mfa.Begin(ctx, u)
+		if err != nil {
+			if errors.Is(err, model.ErrCredentialsChanged) || errors.Is(err, pgx.ErrNoRows) {
+				return model.LoginResponse{}, ErrCredentials
+			}
+			return model.LoginResponse{}, err
+		}
+		if required {
+			return model.LoginResponse{MFA: &challenge}, nil
+		}
+	} else if !s.mfaDisabled && u.HasRole(model.RoleAdmin) {
+		return model.LoginResponse{}, model.ErrMFARequired
 	}
 	token, err := randomHex()
 	if err != nil {

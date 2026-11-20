@@ -62,8 +62,9 @@ func (r *RBACRepository) FindPermissionsByUserID(ctx context.Context, userID str
 		SELECT DISTINCT p.code
 		FROM permissions p
 		JOIN role_permissions rp ON rp.permission_id = p.id
-		JOIN user_roles ur ON ur.role_id = rp.role_id
-		WHERE ur.user_id = $1
+		JOIN roles r ON r.id = rp.role_id
+		JOIN users u ON r.code = ANY(u.roles)
+		WHERE u.id = $1 AND u.is_active
 		ORDER BY p.code ASC
 	`
 	rows, err := r.pool.Query(ctx, query, userID)
@@ -83,13 +84,13 @@ func (r *RBACRepository) FindPermissionsByUserID(ctx context.Context, userID str
 	return permissions, rows.Err()
 }
 
-// FindRolesByUserID retrieves all roles assigned to a user via the user_roles junction table.
+// FindRolesByUserID reads the same authoritative role array as authentication.
 func (r *RBACRepository) FindRolesByUserID(ctx context.Context, userID string) ([]model.Role, error) {
 	query := `
 		SELECT r.id, r.code, r.name, COALESCE(r.description, ''), r.created_at, r.updated_at
 		FROM roles r
-		JOIN user_roles ur ON ur.role_id = r.id
-		WHERE ur.user_id = $1
+		JOIN users u ON r.code = ANY(u.roles)
+		WHERE u.id = $1 AND u.is_active
 		ORDER BY r.code ASC
 	`
 	rows, err := r.pool.Query(ctx, query, userID)
@@ -107,100 +108,6 @@ func (r *RBACRepository) FindRolesByUserID(ctx context.Context, userID string) (
 		roles = append(roles, role)
 	}
 	return roles, rows.Err()
-}
-
-// AssignRoleToUser assigns a role by code to a user, keeping user_roles and users.roles synchronized.
-func (r *RBACRepository) AssignRoleToUser(ctx context.Context, userID, roleCode string) error {
-	roleCode = strings.ToUpper(strings.TrimSpace(roleCode))
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	insertQuery := `
-		INSERT INTO user_roles (user_id, role_id)
-		SELECT $1, r.id FROM roles r WHERE r.code = $2
-		ON CONFLICT DO NOTHING
-	`
-	if _, err := tx.Exec(ctx, insertQuery, userID, roleCode); err != nil {
-		return err
-	}
-
-	updateUserQuery := `
-		UPDATE users
-		SET roles = array_append(roles, $2)
-		WHERE id = $1 AND NOT ($2 = ANY(roles))
-	`
-	if _, err := tx.Exec(ctx, updateUserQuery, userID, roleCode); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
-}
-
-// RemoveRoleFromUser removes a role from a user.
-func (r *RBACRepository) RemoveRoleFromUser(ctx context.Context, userID, roleCode string) error {
-	roleCode = strings.ToUpper(strings.TrimSpace(roleCode))
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	deleteQuery := `
-		DELETE FROM user_roles
-		WHERE user_id = $1 AND role_id = (SELECT id FROM roles WHERE code = $2)
-	`
-	if _, err := tx.Exec(ctx, deleteQuery, userID, roleCode); err != nil {
-		return err
-	}
-
-	updateUserQuery := `
-		UPDATE users
-		SET roles = array_remove(roles, $2)
-		WHERE id = $1
-	`
-	if _, err := tx.Exec(ctx, updateUserQuery, userID, roleCode); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
-}
-
-// SyncUserRoles replaces all user_roles for a user with the given set of role codes.
-func (r *RBACRepository) SyncUserRoles(ctx context.Context, userID string, roleCodes []string) error {
-	normalized, err := model.NormalizeRoles(roleCodes)
-	if err != nil {
-		return err
-	}
-
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	if _, err := tx.Exec(ctx, "DELETE FROM user_roles WHERE user_id = $1", userID); err != nil {
-		return err
-	}
-
-	for _, code := range normalized {
-		assignQuery := `
-			INSERT INTO user_roles (user_id, role_id)
-			SELECT $1, r.id FROM roles r WHERE r.code = $2
-			ON CONFLICT DO NOTHING
-		`
-		if _, err := tx.Exec(ctx, assignQuery, userID, code); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.Exec(ctx, "UPDATE users SET roles = $2 WHERE id = $1", userID, normalized); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
 }
 
 // ErrLastAdmin is returned when a change would leave no active ADMIN.

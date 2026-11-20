@@ -20,8 +20,10 @@ type UserDTO struct {
 }
 
 type LoginResponse struct {
-	Token     string  `json:"token"`
-	TokenType string  `json:"token_type"`
-	ExpiresIn int64   `json:"expires_in"`
-	User      UserDTO `json:"user"`
+	// Transport renders a challenge instead of a session while MFA is pending.
+	MFA       *MFAChallengeResponse `json:"-"`
+	Token     string                `json:"token"`
+	TokenType string                `json:"token_type"`
+	ExpiresIn int64                 `json:"expires_in"`
+	User      UserDTO               `json:"user"`
 }

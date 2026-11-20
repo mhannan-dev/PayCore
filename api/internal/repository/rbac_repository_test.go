@@ -33,7 +33,7 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	digest := func(s string) []byte { d := sha256.Sum256([]byte(s)); return d[:] }
 	expires := time.Now().Add(time.Hour)
 
-	u, err := invites.CreateInvitedUser(ctx, "Invitee", nil, email, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}, digest(email+"1"), expires, "")
+	u, err := invites.CreateInvitedUser(ctx, "Invitee", nil, email, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}, digest(email+"1"), expires, "", emailDraft)
 	if err != nil || u.PasswordSet || u.InviteExpiresAt == nil || !u.IsActive {
 		t.Fatalf("create: %+v %v", u, err)
 	}
@@ -50,10 +50,20 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	}
 
 	// Delivery outcome is recorded on the invitation and shown on the user.
-	if err := invites.RecordEmail(ctx, digest(email+"1"), "failed", "535 5.7.139 Authentication unsuccessful"); err != nil {
+
+	jobs := repository.NewEmailOutboxRepository(pool)
+	job, err := jobs.Claim(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := invites.RecordEmail(ctx, digest(email+"1"), "sent", ""); err != nil {
+	if err = jobs.Complete(ctx, job, model.EmailOutcome{Status: model.EmailQueued, ErrorCode: "smtp_temporary_failure"}); err != nil {
+		t.Fatal(err)
+	}
+	job, err = jobs.Claim(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = jobs.Complete(ctx, job, model.EmailOutcome{Status: model.EmailDelivered}); err != nil {
 		t.Fatal(err)
 	}
 	if listed, _, err := rbac.ListUsers(ctx, model.UserQuery{Search: email, Limit: 1}); err != nil || len(listed) != 1 ||

@@ -22,7 +22,7 @@ func NewPasswordResetRepository(pool *pgxpool.Pool) *PasswordResetRepository {
 // IssueResetToken replaces the active user's unused reset tokens with a new one. It
 // returns pgx.ErrNoRows when no active user has the email, and ErrResetThrottled when
 // a token was issued within cooldown.
-func (r *PasswordResetRepository) IssueResetToken(ctx context.Context, email string, tokenHash []byte, expires time.Time, cooldown time.Duration) (model.ResetUser, error) {
+func (r *PasswordResetRepository) IssueResetToken(ctx context.Context, email string, tokenHash []byte, expires time.Time, cooldown time.Duration, draft ...model.EmailDraft) (model.ResetUser, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return model.ResetUser{}, err
@@ -46,6 +46,9 @@ func (r *PasswordResetRepository) IssueResetToken(ctx context.Context, email str
 		return model.ResetUser{}, err
 	}
 	if _, err := tx.Exec(ctx, "INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", tokenHash, u.ID, expires); err != nil {
+		return model.ResetUser{}, err
+	}
+	if err := insertEmail(ctx, tx, model.EmailPasswordReset, model.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
 		return model.ResetUser{}, err
 	}
 	return u, tx.Commit(ctx)

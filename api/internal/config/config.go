@@ -5,17 +5,20 @@ import (
 	"net"
 	"net/mail"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port        string
-	Environment string
-	DatabaseURL string
-	RedisURL    string
-	UploadDir   string
+	MFAEnabled       bool
+	MFAEncryptionKey string `json:"-"`
+	Port             string
+	Environment      string
+	DatabaseURL      string
+	RedisURL         string
+	UploadDir        string
 	// AppURL is the web app's origin, used in emailed links (e.g. http://localhost:3000).
 	AppURL string
 	// SMTP settings for outgoing email. Empty SMTPHost: development logs emails instead.
@@ -34,16 +37,30 @@ func Load() *Config {
 		log.Println("No .env file found, using system environment variables")
 	}
 
+	mfaEnabled, err := parseMFAEnabled(os.Getenv("MFA_ENABLED"))
+	if err != nil {
+		log.Fatal("MFA_ENABLED must be true or false.")
+	}
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		Environment: getEnv("ENV", "development"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://paycore:paycore_local_dev@127.0.0.1:5434/paycore?sslmode=disable"),
-		RedisURL:    getEnv("REDIS_URL", "localhost:6379"),
-		UploadDir:   getEnv("UPLOAD_DIR", "uploads"),
-		AppURL:      getEnv("APP_URL", "http://localhost:3000"),
+		MFAEnabled:       mfaEnabled,
+		MFAEncryptionKey: os.Getenv("MFA_ENCRYPTION_KEY"),
+		Port:             getEnv("PORT", "8080"),
+		Environment:      getEnv("ENV", "development"),
+		DatabaseURL:      getEnv("DATABASE_URL", "postgres://paycore:paycore_local_dev@127.0.0.1:5434/paycore?sslmode=disable"),
+		RedisURL:         getEnv("REDIS_URL", "localhost:6379"),
+		UploadDir:        getEnv("UPLOAD_DIR", "uploads"),
+		AppURL:           getEnv("APP_URL", "http://localhost:3000"),
 	}
 	loadSMTP(cfg)
 	return cfg
+}
+
+func parseMFAEnabled(value string) (bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return true, nil
+	}
+	return strconv.ParseBool(value)
 }
 
 // loadSMTP reads either the SMTP_* variables or, when SMTP_HOST is unset, the

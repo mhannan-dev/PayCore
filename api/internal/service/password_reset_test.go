@@ -5,12 +5,10 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"paycore/api/internal/mailer"
 	"paycore/api/internal/model"
 	"paycore/api/internal/repository"
 )
@@ -18,17 +16,25 @@ import (
 type resetStore struct {
 	users     map[string]model.ResetUser // by email
 	throttled bool
+	queued    []model.EmailContent
 	tokens    map[string]string // digest hex -> email
 	reset     map[string]string // email -> password hash
 }
 
-func (s *resetStore) IssueResetToken(_ context.Context, email string, digest []byte, _ time.Time, _ time.Duration) (model.ResetUser, error) {
+func (s *resetStore) IssueResetToken(_ context.Context, email string, digest []byte, _ time.Time, _ time.Duration, drafts ...model.EmailDraft) (model.ResetUser, error) {
 	u, ok := s.users[email]
 	if !ok {
 		return model.ResetUser{}, pgx.ErrNoRows
 	}
 	if s.throttled {
 		return model.ResetUser{}, repository.ErrResetThrottled
+	}
+	if len(drafts) > 0 && drafts[0] != nil {
+		content, err := drafts[0](model.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName})
+		if err != nil {
+			return model.ResetUser{}, err
+		}
+		s.queued = append(s.queued, content)
 	}
 	s.tokens = map[string]string{hex.EncodeToString(digest): email}
 	return u, nil
@@ -57,45 +63,25 @@ type okCaptcha struct{ ok bool }
 
 func (c okCaptcha) Verify(string, string) bool { return c.ok }
 
-type memSender struct {
-	mu   sync.Mutex
-	sent []mailer.Message
-}
-
-func (m *memSender) Send(_ context.Context, msg mailer.Message) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.sent = append(m.sent, msg)
-	return nil
-}
-
 var resetLink = regexp.MustCompile(`http://web\.test/reset-password#token=([0-9a-f]{64})`)
 
-func newResetService(captchaOK bool) (*PasswordResetService, *resetStore, *memSender) {
+func newResetService(captchaOK bool) (*PasswordResetService, *resetStore) {
 	store := &resetStore{users: map[string]model.ResetUser{"rasel@example.test": {ID: "u1", Email: "rasel@example.test", FirstName: "Rasel"}}}
-	sender := &memSender{}
-	return NewPasswordResetService(store, okCaptcha{captchaOK}, NewMailOutbox(sender), "http://web.test/"), store, sender
-}
-
-func settle(svc *PasswordResetService) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	svc.Wait(ctx)
+	return NewPasswordResetService(store, okCaptcha{captchaOK}, true, "http://web.test/"), store
 }
 
 func TestPasswordResetFlow(t *testing.T) {
-	svc, store, sender := newResetService(true)
+	svc, store := newResetService(true)
 	ctx := context.Background()
 	if err := svc.Request(ctx, model.PasswordResetRequest{Email: " Rasel@Example.TEST ", CaptchaID: "id", CaptchaAnswer: "1"}); err != nil {
 		t.Fatal(err)
 	}
-	settle(svc)
-	if len(sender.sent) != 1 || sender.sent[0].To != "rasel@example.test" || sender.sent[0].Subject != "Reset your PayCore password" {
-		t.Fatalf("email: %+v", sender.sent)
+	if len(store.queued) != 1 || store.queued[0].To != "rasel@example.test" || store.queued[0].Subject != "Reset your PayCore password" {
+		t.Fatalf("email: %+v", store.queued)
 	}
-	m := resetLink.FindStringSubmatch(sender.sent[0].Text)
-	if m == nil || !strings.Contains(sender.sent[0].HTML, m[0]) {
-		t.Fatalf("email lacks the reset link:\n%s", sender.sent[0].Text)
+	m := resetLink.FindStringSubmatch(store.queued[0].Text)
+	if m == nil || !strings.Contains(store.queued[0].HTML, m[0]) {
+		t.Fatalf("email lacks the reset link:\n%s", store.queued[0].Text)
 	}
 	token := m[1]
 	if info, err := svc.Inspect(ctx, token); err != nil || info.Email != "rasel@example.test" {
@@ -113,7 +99,7 @@ func TestPasswordResetFlow(t *testing.T) {
 }
 
 func TestPasswordResetDoesNotRevealAccounts(t *testing.T) {
-	svc, store, sender := newResetService(true)
+	svc, store := newResetService(true)
 	ctx := context.Background()
 	// Unknown email and a throttled request both succeed silently, without email.
 	if err := svc.Request(ctx, model.PasswordResetRequest{Email: "nobody@example.test", CaptchaID: "id", CaptchaAnswer: "1"}); err != nil {
@@ -123,14 +109,13 @@ func TestPasswordResetDoesNotRevealAccounts(t *testing.T) {
 	if err := svc.Request(ctx, model.PasswordResetRequest{Email: "rasel@example.test", CaptchaID: "id", CaptchaAnswer: "1"}); err != nil {
 		t.Fatalf("throttled: %v", err)
 	}
-	settle(svc)
-	if len(sender.sent) != 0 {
-		t.Fatalf("no email expected, got %d", len(sender.sent))
+	if len(store.queued) != 0 {
+		t.Fatalf("no email expected, got %d", len(store.queued))
 	}
 }
 
 func TestPasswordResetNeedsCaptcha(t *testing.T) {
-	svc, store, _ := newResetService(false)
+	svc, store := newResetService(false)
 	if err := svc.Request(context.Background(), model.PasswordResetRequest{Email: "rasel@example.test"}); err != ErrCaptcha {
 		t.Fatalf("captcha: %v", err)
 	}
@@ -139,15 +124,13 @@ func TestPasswordResetNeedsCaptcha(t *testing.T) {
 	}
 }
 
-func TestPasswordResetQueueSaturationDoesNotRevealAccount(t *testing.T) {
-	svc, _, sender := newResetService(true)
-	queue := NewMailOutbox(sender, MailOptions{Capacity: 1})
-	queue.pending <- struct{}{}
-	defer func() { <-queue.pending }()
-	svc.EmailQueue = queue
-	for _, email := range []string{"rasel@example.test", "unknown@example.test"} {
-		if err := svc.Request(context.Background(), model.PasswordResetRequest{Email: email}); err != nil {
-			t.Fatalf("queue saturation exposed account existence: %v", err)
-		}
+func TestPasswordResetWithoutMailer(t *testing.T) {
+	svc, store := newResetService(true)
+	svc.emailEnabled = false
+	if err := svc.Request(context.Background(), model.PasswordResetRequest{Email: "rasel@example.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.queued) != 0 || len(store.tokens) != 1 {
+		t.Fatal("unconfigured delivery should persist token without email content")
 	}
 }

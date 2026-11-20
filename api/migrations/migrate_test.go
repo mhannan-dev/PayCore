@@ -61,6 +61,15 @@ func TestFreshAndLegacyUserSchema(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// Authentication predates these profile-field upgrades. Include its
+				// existing session table in the legacy fixture, not only users.
+				if _, err = pool.Exec(ctx, `CREATE TABLE auth_sessions (
+				 token_hash BYTEA PRIMARY KEY CHECK(octet_length(token_hash)=32),
+				 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),expires_at TIMESTAMPTZ NOT NULL,
+				 CHECK(expires_at>created_at))`); err != nil {
+					t.Fatal(err)
+				}
 				if legacyVersion == 2 {
 					profileSQL, err := sqlFiles.ReadFile("002_user_profile_fields.sql")
 					if err != nil {

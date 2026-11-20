@@ -8,8 +8,11 @@ func TestRBACPermissions(t *testing.T) {
 	if !HasPermission(perms, PermUsersRead) {
 		t.Fatal("expected users:read to be present")
 	}
-	if !HasPermission(perms, "USERS:READ") {
-		t.Fatal("expected case-insensitive matching")
+	if HasPermission(perms, "USERS:READ") || HasPermission([]string{" users:read "}, PermUsersRead) {
+		t.Fatal("malformed permission codes must not grant access")
+	}
+	if HasPermission([]string{""}, "") || HasAllPermissions(perms) {
+		t.Fatal("empty permission requirements must deny access")
 	}
 	if HasPermission(perms, PermUsersWrite) {
 		t.Fatal("expected users:write to be absent")

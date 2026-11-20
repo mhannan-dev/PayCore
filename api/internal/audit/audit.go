@@ -15,6 +15,13 @@ import (
 type Action string
 
 const (
+	StatementMatchingConfigured Action = "statement_matching_configured"
+	StatementMatchConfirmed     Action = "statement_match_confirmed"
+	StatementMatchRejected      Action = "statement_match_rejected"
+	StatementMatchReset         Action = "statement_match_reset"
+	StatementExceptionNoted     Action = "statement_exception_noted"
+
+	StatementImported      Action = "statement_imported"
 	LoginSucceeded         Action = "login_succeeded"
 	LoginFailed            Action = "login_failed"
 	Logout                 Action = "logout"
@@ -27,12 +34,22 @@ const (
 	UserDeleted            Action = "user_deleted"
 	PasswordResetRequested Action = "password_reset_requested"
 	PasswordResetCompleted Action = "password_reset_completed"
+	MFAEnrolled            Action = "mfa_enrolled"
+	MFAVerified            Action = "mfa_verified"
+	MFAFailed              Action = "mfa_failed"
+	MFARecoveryUsed        Action = "mfa_recovery_used"
+	MFARecoveryRegenerated Action = "mfa_recovery_regenerated"
+	MFAReplacementStarted  Action = "mfa_replacement_started"
+	MFAReplaced            Action = "mfa_replaced"
+	SessionsRevoked        Action = "sessions_revoked"
 )
 
 // Actions lists every Action, for validation and filters.
-var Actions = []Action{
+var Actions = []Action{StatementMatchingConfigured, StatementMatchConfirmed, StatementMatchRejected, StatementMatchReset, StatementExceptionNoted, StatementImported,
 	LoginSucceeded, LoginFailed, Logout, UserInvited, InvitationResent, InvitationAccepted,
 	RolesChanged, UserDeactivated, UserActivated, UserDeleted, PasswordResetRequested, PasswordResetCompleted,
+	MFAEnrolled, MFAVerified, MFAFailed, MFARecoveryUsed,
+	MFARecoveryRegenerated, MFAReplacementStarted, MFAReplaced, SessionsRevoked,
 }
 
 // Valid reports whether a is a known action.
@@ -50,6 +67,7 @@ type Details struct {
 	RolesBefore []string `json:"roles_before,omitempty"`
 	RolesAfter  []string `json:"roles_after,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
+	Count       *int64   `json:"count,omitempty"`
 }
 
 // Event is one audit record. ID and OccurredAt are set by the database.

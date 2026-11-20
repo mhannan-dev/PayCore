@@ -17,21 +17,41 @@ const (
 )
 
 // Standard system permission codes
+type PermissionCode string
+
 const (
-	PermUsersRead        = "users:read"
-	PermUsersWrite       = "users:write"
-	PermTransfersRead    = "transfers:read"
-	PermTransfersCreate  = "transfers:create"
-	PermTransfersReverse = "transfers:reverse"
-	PermLedgerRead       = "ledger:read"
-	PermAuditRead        = "audit:read"
-	PermAuditVerify      = "audit:verify"
-	PermReportsRead      = "reports:read"
-	PermReportsExport    = "reports:export"
-	PermSimulatorRun     = "simulator:run"
-	PermSystemRead       = "system:read"
-	PermAccountsWrite    = "accounts:write"
+	PermReconciliationMatch  = "reconciliation:match"
+	PermReconciliationRead   = "reconciliation:read"
+	PermReconciliationImport = "reconciliation:import"
+	PermUsersRead            = "users:read"
+	PermUsersWrite           = "users:write"
+	PermTransfersRead        = "transfers:read"
+	PermTransfersCreate      = "transfers:create"
+	PermTransfersReverse     = "transfers:reverse"
+	PermLedgerRead           = "ledger:read"
+	PermAuditRead            = "audit:read"
+	PermAuditVerify          = "audit:verify"
+	PermReportsRead          = "reports:read"
+	PermReportsExport        = "reports:export"
+	PermSimulatorRun         = "simulator:run"
+	PermSystemRead           = "system:read"
+	PermAccountsWrite        = "accounts:write"
+	PermAttachmentsRead      = "attachments:read"
+	PermAttachmentsWrite     = "attachments:write"
+	PermAttachmentsDelete    = "attachments:delete"
 )
+
+// Valid rejects misspelled or empty route requirements instead of bypassing RBAC.
+func (p PermissionCode) Valid() bool {
+	switch p {
+	case PermReconciliationMatch, PermReconciliationRead, PermReconciliationImport, PermUsersRead, PermUsersWrite, PermTransfersRead, PermTransfersCreate, PermTransfersReverse,
+		PermLedgerRead, PermAuditRead, PermAuditVerify, PermReportsRead, PermReportsExport,
+		PermSimulatorRun, PermSystemRead, PermAccountsWrite, PermAttachmentsRead, PermAttachmentsWrite, PermAttachmentsDelete:
+		return true
+	default:
+		return false
+	}
+}
 
 // Role represents a system role definition.
 type Role struct {
@@ -70,9 +90,11 @@ type RolePermission struct {
 
 // HasPermission checks whether a slice of permission codes contains the target.
 func HasPermission(permissions []string, target string) bool {
-	target = strings.ToLower(strings.TrimSpace(target))
+	if target == "" {
+		return false
+	}
 	for _, p := range permissions {
-		if strings.ToLower(strings.TrimSpace(p)) == target {
+		if p == target {
 			return true
 		}
 	}
@@ -91,6 +113,9 @@ func HasAnyPermission(permissions []string, targets ...string) bool {
 
 // HasAllPermissions checks if all of the specified targets are present.
 func HasAllPermissions(permissions []string, targets ...string) bool {
+	if len(targets) == 0 {
+		return false
+	}
 	for _, target := range targets {
 		if !HasPermission(permissions, target) {
 			return false

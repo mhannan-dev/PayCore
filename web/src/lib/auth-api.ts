@@ -16,8 +16,41 @@ export type AuthUser = {
 };
 export type Captcha = { captcha_id: string; image: string; expires_in: number };
 export type LoginResponse = { token: string; token_type: "Bearer"; expires_in: number; user: AuthUser };
+export type MFAChallenge = {
+  state: "mfa_enrollment_required" | "mfa_required";
+  challenge_token: string;
+  expires_in: number;
+  enrollment: { secret: string; uri: string; qr_image: string } | null;
+};
+export type SecurityProof = { password: string; code: string };
+export type SecuritySession = { id: string; created_at: string; expires_at: string; mfa_verified: boolean; current: boolean };
+export type SecurityOverview = {
+  mfa_enforced: boolean;
+  mfa_enabled: boolean;
+  mfa_required: boolean;
+  enabled_at: string | null;
+  recovery_codes_remaining: number;
+  sessions: SecuritySession[];
+  more_sessions: boolean;
+};
+export type RecoveryCodesResult = { recovery_codes: string[] };
+export type ReplacementSetup = { enrollment: { secret: string; uri: string; qr_image: string }; expires_in: number };
+export type SecurityActionResult = { revoked_count: number };
+export type ReplacementResult = RecoveryCodesResult & SecurityActionResult;
+export type MFALoginResult = { session: LoginResponse; recovery_codes: string[] };
 export type LoginInput = { email: string; password: string; captcha_id: string; captcha_answer: string };
-export type Attachment = { id: string; file_name: string; content_type: string; size_bytes: number };
+export type Attachment = {
+  id: string;
+  owner_user_id: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string | null;
+  storage_kind: "LOCAL" | "EXTERNAL";
+  /** Omitted for local attachments; legacy external attachments supply a URL. */
+  external_url?: string;
+  created_at: string;
+};
 
 export class AuthApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -88,7 +121,15 @@ export async function request<T>(path: string, options?: RequestOptions): Promis
 
 // --- Auth ---------------------------------------------------------------------
 export const fetchCaptcha = () => request<Captcha>("/auth/captcha");
-export const login = (input: LoginInput) => request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify(input) });
+export const login = (input: LoginInput) => request<LoginResponse | MFAChallenge>("/auth/login", { method: "POST", body: JSON.stringify(input) });
+export const verifyMFA = (challenge_token: string, code: string) =>
+  request<MFALoginResult>("/auth/mfa/verify", { method: "POST", body: JSON.stringify({ challenge_token, code }) });
+export const fetchAccountSecurity = (token: string, signal?: AbortSignal) => request<SecurityOverview>("/auth/security", { token, signal });
+export const regenerateRecoveryCodes = (token: string, proof: SecurityProof) => request<RecoveryCodesResult>("/auth/security/recovery-codes", { method: "POST", token, body: JSON.stringify(proof) });
+export const beginAuthenticatorReplacement = (token: string, proof: SecurityProof) => request<ReplacementSetup>("/auth/security/authenticator", { method: "POST", token, body: JSON.stringify(proof) });
+export const confirmAuthenticatorReplacement = (token: string, proof: SecurityProof) => request<ReplacementResult>("/auth/security/authenticator/confirm", { method: "POST", token, body: JSON.stringify(proof) });
+export const revokeOtherSessions = (token: string, proof: SecurityProof) => request<SecurityActionResult>("/auth/security/sessions/revoke-others", { method: "POST", token, body: JSON.stringify(proof) });
+export const revokeSecuritySession = (token: string, id: string, proof: SecurityProof) => request<SecurityActionResult>(`/auth/security/sessions/${encodeURIComponent(id)}/revoke`, { method: "POST", token, body: JSON.stringify(proof) });
 export const fetchMe = (token: string) => request<AuthUser>("/auth/me", { token });
 export type ProfileInput = { first_name: string; last_name: string | null };
 export const updateMe = (token: string, input: ProfileInput) =>
@@ -189,6 +230,8 @@ export const AUDIT_ACTIONS = [
   "user_invited", "invitation_resent", "invitation_accepted",
   "roles_changed", "user_deactivated", "user_activated", "user_deleted",
   "password_reset_requested", "password_reset_completed",
+  "mfa_enrolled", "mfa_verified", "mfa_failed", "mfa_recovery_used",
+  "mfa_recovery_regenerated", "mfa_replacement_started", "mfa_replaced", "sessions_revoked", "statement_imported", "statement_matching_configured","statement_match_confirmed","statement_match_rejected","statement_match_reset","statement_exception_noted",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditEvent = {
@@ -199,7 +242,7 @@ export type AuditEvent = {
   actor_email: string | null;
   target_user_id: string | null;
   target_email: string | null;
-  details: { roles_before?: string[]; roles_after?: string[]; reason?: string };
+  details: { roles_before?: string[]; roles_after?: string[]; reason?: string; count?: number };
   ip: string | null;
   user_agent: string | null;
 };

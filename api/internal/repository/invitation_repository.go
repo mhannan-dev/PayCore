@@ -32,7 +32,7 @@ func nullableUUID(id string) any {
 }
 
 // CreateInvitedUser inserts an active user without a password, their roles, and an invitation.
-func (r *InvitationRepository) CreateInvitedUser(ctx context.Context, firstName string, lastName *string, email string, roles []string, tokenHash []byte, expires time.Time, createdBy string) (model.ManagedUser, error) {
+func (r *InvitationRepository) CreateInvitedUser(ctx context.Context, firstName string, lastName *string, email string, roles []string, tokenHash []byte, expires time.Time, createdBy string, draft ...model.EmailDraft) (model.ManagedUser, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return model.ManagedUser{}, err
@@ -59,12 +59,15 @@ func (r *InvitationRepository) CreateInvitedUser(ctx context.Context, firstName 
 	if err != nil {
 		return model.ManagedUser{}, err
 	}
+	if err := insertEmail(ctx, tx, model.EmailInvitation, model.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
+		return model.ManagedUser{}, err
+	}
 	return u, tx.Commit(ctx)
 }
 
 // ReissueInvitation replaces a not-yet-activated user's unused invitations with a new one.
 // It returns pgx.ErrNoRows for an unknown user and ErrAlreadyActivated once a password is set.
-func (r *InvitationRepository) ReissueInvitation(ctx context.Context, userID string, tokenHash []byte, expires time.Time, createdBy string) (model.ManagedUser, error) {
+func (r *InvitationRepository) ReissueInvitation(ctx context.Context, userID string, tokenHash []byte, expires time.Time, createdBy string, draft ...model.EmailDraft) (model.ManagedUser, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return model.ManagedUser{}, err
@@ -86,6 +89,9 @@ func (r *InvitationRepository) ReissueInvitation(ctx context.Context, userID str
 	}
 	u, err := scanManagedUser(tx.QueryRow(ctx, "SELECT "+managedUserColumns+" FROM "+managedUserFrom+" WHERE users.id = $1", userID))
 	if err != nil {
+		return model.ManagedUser{}, err
+	}
+	if err := insertEmail(ctx, tx, model.EmailInvitation, model.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
 		return model.ManagedUser{}, err
 	}
 	return u, tx.Commit(ctx)
@@ -131,21 +137,4 @@ func (r *InvitationRepository) AcceptInvitation(ctx context.Context, tokenHash [
 		return "", err
 	}
 	return email, tx.Commit(ctx)
-}
-
-// RecordEmail stores the outcome of one delivery attempt for an invitation. A
-// replaced (re-sent) invitation no longer exists, so its late result is ignored.
-func (r *InvitationRepository) RecordEmail(ctx context.Context, tokenHash []byte, status string, emailError string) error {
-	var errText any
-	if emailError != "" {
-		if len(emailError) > 480 {
-			emailError = emailError[:480] + "…"
-		}
-		errText = emailError
-	}
-	_, err := r.pool.Exec(ctx, `UPDATE user_invitations SET email_status = $2, email_attempts = email_attempts + 1,
-		email_sent_at = CASE WHEN $2 = 'sent' THEN NOW() ELSE email_sent_at END,
-		email_error = $3
-		WHERE token_hash = $1`, tokenHash, status, errText)
-	return err
 }

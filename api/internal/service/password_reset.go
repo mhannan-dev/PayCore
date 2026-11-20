@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"html/template"
-	"log"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -28,25 +26,25 @@ const (
 var ErrResetToken = errors.New("password reset link invalid or expired")
 
 type PasswordResetStore interface {
-	IssueResetToken(ctx context.Context, email string, tokenHash []byte, expires time.Time, cooldown time.Duration) (model.ResetUser, error)
+	IssueResetToken(ctx context.Context, email string, tokenHash []byte, expires time.Time, cooldown time.Duration, draft ...model.EmailDraft) (model.ResetUser, error)
 	FindResetToken(ctx context.Context, tokenHash []byte) (model.PasswordResetInfo, error)
 	ResetPassword(ctx context.Context, tokenHash []byte, passwordHash string) (string, error)
 }
 
 // PasswordResetService implements "forgot password". Requests never reveal whether
 // an account exists: unknown emails, inactive users and throttled requests all
-// succeed silently. Emails go through the embedded MailOutbox.
+// succeed silently. Email intent is committed with the token.
 type PasswordResetService struct {
-	EmailQueue
-	store   PasswordResetStore
-	captcha CaptchaVerifier
-	appURL  string
+	emailEnabled bool
+	store        PasswordResetStore
+	captcha      CaptchaVerifier
+	appURL       string
 	// Audit, when set, records issued reset links and completed resets.
 	Audit audit.Recorder
 }
 
-func NewPasswordResetService(store PasswordResetStore, captcha CaptchaVerifier, queue EmailQueue, appURL string) *PasswordResetService {
-	return &PasswordResetService{EmailQueue: queue, store: store, captcha: captcha, appURL: strings.TrimRight(appURL, "/")}
+func NewPasswordResetService(store PasswordResetStore, captcha CaptchaVerifier, emailEnabled bool, appURL string) *PasswordResetService {
+	return &PasswordResetService{emailEnabled: emailEnabled, store: store, captcha: captcha, appURL: strings.TrimRight(appURL, "/")}
 }
 
 // Request verifies the captcha and, when an active account has the email, queues a
@@ -62,7 +60,7 @@ func (s *PasswordResetService) Request(ctx context.Context, req model.PasswordRe
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	expires := time.Now().UTC().Add(PasswordResetTTL)
-	u, err := s.store.IssueResetToken(ctx, email, digest, expires, PasswordResetCooldown)
+	u, err := s.store.IssueResetToken(ctx, email, digest, expires, PasswordResetCooldown, s.draft(token, expires))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, repository.ErrResetThrottled):
 		return nil // same answer as success: no account enumeration
@@ -70,19 +68,7 @@ func (s *PasswordResetService) Request(ctx context.Context, req model.PasswordRe
 		return ErrUnavailable
 	}
 	audit.Record(ctx, s.Audit, audit.Event{Action: audit.PasswordResetRequested, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
-	if !s.Configured() {
-		log.Printf("password reset for user %s: no mail server is configured; nothing sent", u.ID)
-		return nil
-	}
-	msg, err := s.message(u, token, expires)
-	if err != nil {
-		return ErrUnavailable
-	}
-	if err := s.Enqueue(ctx, "password reset email for user "+u.ID, msg, func(context.Context, string, string) {}); err != nil {
-		// Keep the same public answer as an unknown account, including under load.
-		slog.WarnContext(ctx, "password_reset_delivery_not_queued")
-		return nil
-	}
+
 	return nil
 }
 
@@ -133,4 +119,14 @@ func (s *PasswordResetService) message(u model.ResetUser, token string, expires 
 		"Choose a new password here:\n\n" + link + "\n\nThe link works once and expires " + when + ".\n" +
 		"If you did not ask for this, ignore this email: your password stays the same.\n"
 	return mailer.Message{To: u.Email, Subject: "Reset your PayCore password", Text: text, HTML: html.String()}, nil
+}
+
+func (s *PasswordResetService) draft(token string, expires time.Time) model.EmailDraft {
+	if !s.emailEnabled {
+		return nil
+	}
+	return func(recipient model.EmailRecipient) (model.EmailContent, error) {
+		msg, err := s.message(model.ResetUser{ID: recipient.ID, FirstName: recipient.FirstName, Email: recipient.Email}, token, expires)
+		return model.EmailContent{To: msg.To, Subject: msg.Subject, Text: msg.Text, HTML: msg.HTML}, err
+	}
 }

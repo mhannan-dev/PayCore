@@ -37,9 +37,10 @@ func (s photoInspectorFake) InspectImage(context.Context, string) (model.ImageIn
 
 func TestPhotoServicePolicyAndOwnership(t *testing.T) {
 	for _, tc := range []struct {
-		name, caller, kind string
-		info               model.ImageInfo
-		valid              bool
+		name, caller string
+		kind         model.AttachmentStorageKind
+		info         model.ImageInfo
+		valid        bool
 	}{
 		{"WebP", "owner", "LOCAL", model.ImageInfo{Width: 2, Height: 2, Format: model.ImageWebP}, true},
 		{"other owner", "other", "LOCAL", model.ImageInfo{Width: 2, Height: 2, Format: model.ImageWebP}, false},

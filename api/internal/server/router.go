@@ -18,6 +18,10 @@ type DatabasePinger interface {
 // A nil handler is replaced by one without dependencies, whose routes answer 503,
 // so the full route table exists for discovery (`-routes`) and tests.
 type Handlers struct {
+	Matching       *handler.MatchingHandler
+	Statements     *handler.StatementHandler
+	Security       *handler.SecurityHandler
+	MFA            *handler.MFAHandler
 	Auth           *handler.AuthHandler
 	Attachments    *handler.AttachmentHandler
 	Users          *handler.UsersHandler
@@ -68,7 +72,7 @@ func New(db DatabasePinger, h Handlers) *gin.Engine {
 		h.Auth = handler.NewAuthHandler(nil, nil)
 	}
 	if h.Attachments == nil {
-		h.Attachments = handler.NewAttachmentHandler(nil, nil, nil, nil, nil)
+		h.Attachments = handler.NewAttachmentHandler(nil, nil, nil)
 	}
 	if h.Users == nil {
 		h.Users = handler.NewUsersHandler(nil, nil)
@@ -87,6 +91,14 @@ func New(db DatabasePinger, h Handlers) *gin.Engine {
 	}
 
 	v1 := r.Group("/api/v1")
+	if h.Security == nil {
+		h.Security = handler.NewSecurityHandler(nil, nil)
+	}
+	h.Security.Register(v1)
+	if h.MFA == nil {
+		h.MFA = handler.NewMFAHandler(nil)
+	}
+	h.MFA.Register(v1)
 	h.Auth.Register(v1)
 	h.Attachments.Register(v1)
 	h.Users.Register(v1)
@@ -94,5 +106,13 @@ func New(db DatabasePinger, h Handlers) *gin.Engine {
 	h.PasswordResets.Register(v1)
 	h.Audit.Register(v1)
 	h.Ledger.Register(v1)
+	if h.Statements == nil {
+		h.Statements = handler.NewStatementHandler(nil, nil)
+	}
+	h.Statements.Register(v1)
+	if h.Matching == nil {
+		h.Matching = handler.NewMatchingHandler(nil, nil)
+	}
+	h.Matching.Register(v1)
 	return r
 }

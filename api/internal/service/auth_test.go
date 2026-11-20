@@ -26,6 +26,54 @@ type fakeUsers struct {
 	lookups int
 }
 
+func TestAdminCannotLoginWithoutMFAService(t *testing.T) {
+	hash, err := HashPassword("Admin#1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeUsers{user: model.User{ID: "admin", Email: "admin@example.test", PasswordHash: hash, Roles: []string{model.RoleAdmin}, IsActive: true}}
+	auth, err := NewAuthService(store, &fakeCaptcha{valid: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = auth.Login(context.Background(), model.LoginRequest{Email: store.user.Email, Password: "Admin#1234"}); !errors.Is(err, model.ErrMFARequired) || len(store.hash) != 0 {
+		t.Fatal("admin obtained session without configured MFA")
+	}
+}
+
+func TestExplicitMFAPauseAllowsAdminPasswordLogin(t *testing.T) {
+	hash, err := HashPassword("Admin#1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeUsers{user: model.User{ID: "admin", Email: "paused@example.test", PasswordHash: hash, Roles: []string{model.RoleAdmin}, IsActive: true}}
+	auth, err := NewAuthServiceWithMFAPolicy(store, &fakeCaptcha{valid: true}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := auth.Login(context.Background(), model.LoginRequest{Email: store.user.Email, Password: "Admin#1234"})
+	if err != nil || result.MFA != nil || len(result.Token) != 64 || len(store.hash) == 0 {
+		t.Fatalf("paused MFA blocked login: %+v %v", result.MFA, err)
+	}
+	if _, err = auth.CurrentUser(context.Background(), result.Token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = auth.Login(context.Background(), model.LoginRequest{Email: store.user.Email, Password: "Admin#1234"}); !errors.Is(err, ErrCaptcha) {
+		t.Fatal("MFA pause bypassed CAPTCHA")
+	}
+	auth.captcha = &fakeCaptcha{valid: true}
+	if _, err = auth.Login(context.Background(), model.LoginRequest{Email: store.user.Email, Password: "wrong password"}); !errors.Is(err, ErrCredentials) {
+		t.Fatal("MFA pause bypassed password verification")
+	}
+	paused := NewMFAServiceWithMFAPolicy(nil, nil, false)
+	if _, required, err := paused.Begin(context.Background(), store.user); err != nil || required {
+		t.Fatal("paused MFA issued challenge")
+	}
+	if _, err := paused.Verify(context.Background(), model.MFAVerifyRequest{}); !errors.Is(err, model.ErrMFADisabled) {
+		t.Fatal("paused MFA accepted verification")
+	}
+}
+
 func (s *fakeUsers) FindByEmail(_ context.Context, email string) (model.User, error) {
 	s.lookups++
 	if s.missing || email != s.user.Email {

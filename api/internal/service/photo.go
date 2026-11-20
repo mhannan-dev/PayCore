@@ -34,7 +34,7 @@ func (s *PhotoService) Set(ctx context.Context, owner string, id *string) (model
 		if err != nil {
 			return model.PhotoResult{}, err
 		}
-		if a.StorageKind != "LOCAL" || a.StorageKey == nil {
+		if a.StorageKind != model.AttachmentLocal || a.StorageKey == nil {
 			return model.PhotoResult{}, ErrInvalidPhoto
 		}
 		info, err := s.images.InspectImage(ctx, *a.StorageKey)

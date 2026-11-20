@@ -13,9 +13,32 @@ import (
 // ErrorTable is the single mapping from domain errors to HTTP responses (coding
 // rule 26). Services and repositories return these errors; handlers pass them to
 // c.Error; middleware.Errors writes the matching response. First match wins.
-// Errors not listed fall back to the route group's ErrorFallback (e.g. 503
-// "rbac_unavailable") or 500 "internal_error", and are logged.
+// Unknown errors become 500 "internal_error" and are logged. Explicitly
+// unconfigured dependencies can use a route-specific unavailable response.
 var ErrorTable = apperr.Table{
+	{Target: model.ErrMFADisabled, Error: apperr.New(http.StatusConflict, "mfa_disabled", "MFA is temporarily disabled by system configuration.")},
+	{Target: model.ErrMatchInvalid, Error: apperr.BadRequest("invalid_matching_request", "Supply a valid direction mapping or review action with the current version. Rejection, reset and notes require a reason of 3–500 characters.")},
+	{Target: model.ErrMatchStale, Error: apperr.New(http.StatusConflict, "matching_stale", "This review changed. Refresh matching before trying again.")},
+	{Target: model.ErrMatchCandidate, Error: apperr.New(http.StatusConflict, "matching_candidate_unavailable", "The posting does not meet the exact matching criteria, was rejected, or is already reconciled. Refresh matching.")},
+	{Target: model.ErrMatchModeLocked, Error: apperr.New(http.StatusConflict, "matching_mode_locked", "Reset all confirmed matches before changing the direction mapping.")},
+	{Target: model.ErrStatementFormat, Error: apperr.BadRequest("invalid_statement_format", "Use the six-column CSV template with 1–2000 rows, at most 2 MiB, encoded as UTF-8.")},
+	{Target: model.ErrStatementAccount, Error: apperr.BadRequest("invalid_statement_account", "Select an asset or liability account.")},
+	{Target: model.ErrStatementInvalid, Error: apperr.BadRequest("invalid_statement_rows", "Fix all validation errors before importing.")},
+	{Target: model.ErrStatementChanged, Error: apperr.New(http.StatusConflict, "statement_changed", "The source or preview changed. Preview the statement again.")},
+	{Target: model.ErrStatementDuplicate, Error: apperr.New(http.StatusConflict, "statement_duplicate", "This statement is already imported for this account. Refresh the preview to open it.")},
+	{Target: model.ErrStatementNotFound, Error: apperr.NotFound("statement_not_found", "Statement import not found.")},
+	{Target: model.ErrSecuritySession, Error: apperr.New(http.StatusUnauthorized, "invalid_credentials", "Your session is no longer valid. Sign in again.")},
+	{Target: model.ErrSecurityTarget, Error: apperr.NotFound("session_not_found", "Session not found.")},
+	{Target: model.ErrSecurityCurrentSession, Error: apperr.New(http.StatusConflict, "current_session", "Use Sign out to end this session.")},
+	{Target: model.ErrSecurityReplacement, Error: apperr.New(http.StatusConflict, "replacement_expired", "The replacement expired or belongs to another session. Start again.")},
+	{Target: model.ErrMFARequired, Error: apperr.New(http.StatusUnauthorized, "mfa_required", "Sign in again to complete MFA verification.")},
+	{Target: model.ErrMFAChallenge, Error: apperr.New(http.StatusUnauthorized, "mfa_challenge_invalid", "This MFA challenge expired or is no longer valid. Sign in again.")},
+	{Target: model.ErrMFACode, Error: apperr.New(http.StatusUnauthorized, "mfa_code_invalid", "The code is invalid or has already been used.")},
+	{Target: model.ErrMFALocked, Error: apperr.New(http.StatusTooManyRequests, "mfa_locked", "Too many MFA attempts. Try again in five minutes.").WithHeader("Retry-After", "300")},
+	{Match: invalidUpload},
+	{Target: service.ErrExternalAttachment, Error: apperr.New(http.StatusConflict, "legacy_external_file_not_stored_locally", "This file is stored externally and cannot be served from here.")},
+	{Target: service.ErrInvalidStoredPhoto, Error: apperr.New(http.StatusUnsupportedMediaType, "invalid_photo_type", "The stored profile photo is not a WebP, JPEG, PNG or GIF image.")},
+	{Target: service.ErrAttachmentPagination, Error: apperr.BadRequest("invalid_attachment_pagination", "Invalid attachment pagination.")},
 	{Target: service.ErrInvalidPhoto, Error: apperr.New(http.StatusUnsupportedMediaType, "photo_must_be_jpeg_png_or_gif_max_25_megapixels", "The profile photo must be a WebP, JPEG, PNG or GIF of at most 25 megapixels (10000 px per side).")},
 	// Authentication
 	{Target: service.ErrCredentials, Error: apperr.New(http.StatusUnauthorized, "invalid_credentials", "Invalid credentials or session.")},
@@ -40,7 +63,7 @@ var ErrorTable = apperr.Table{
 
 	// Not found (named sentinels; a bare pgx.ErrNoRows is deliberately not mapped)
 	{Target: repository.ErrUserNotFound, Error: apperr.NotFound("user_not_found", "No user has that ID.")},
-	{Target: repository.ErrAttachmentNotFound, Error: apperr.NotFound("attachment_not_found", "Attachment not found.")},
+	{Target: model.ErrAttachmentNotFound, Error: apperr.NotFound("attachment_not_found", "Attachment not found.")},
 
 	// Ledger
 	{Match: invalidLedgerRequest},
@@ -58,6 +81,48 @@ var ErrorTable = apperr.Table{
 
 	// Infrastructure
 	{Target: service.ErrUnavailable, Error: apperr.Unavailable("auth_unavailable", "The authentication service is unavailable. Try again shortly.")},
+}
+
+func invalidUpload(err error) (*apperr.Error, bool) {
+	var invalid *model.UploadError
+	if !errors.As(err, &invalid) {
+		return nil, false
+	}
+	status := http.StatusBadRequest
+	var message string
+	switch invalid.Code {
+	case model.UploadTooLarge:
+		status = http.StatusRequestEntityTooLarge
+		message = "The request is too large."
+	case model.UploadInvalidSize:
+		status = http.StatusRequestEntityTooLarge
+		message = "The file must be between 1 byte and 10 MiB."
+	case model.UploadInvalidMultipart:
+		message = "Send the file as multipart/form-data."
+	case model.UploadOneFileRequired:
+		message = "Send exactly one file in the \"file\" field."
+	case model.UploadInvalidName:
+		message = "The file name is missing or not allowed."
+	case model.UploadInvalidFile:
+		message = "The file could not be read."
+	case model.UploadImageBusy:
+		status = http.StatusServiceUnavailable
+		message = "Image conversion is busy. Try again shortly."
+	case model.UploadUnsupportedImage:
+		status = http.StatusUnsupportedMediaType
+		message = "Use a JPEG, PNG, GIF, WebP, BMP or TIFF image. Other image formats cannot be converted."
+	case model.UploadInvalidImage:
+		message = "The image is corrupt or could not be decoded."
+	case model.UploadUnsupportedAnimation:
+		status = http.StatusUnsupportedMediaType
+		message = "This animated image format is not supported. Use an animated GIF or a still image."
+	case model.UploadImageDimensions:
+		status = http.StatusUnsupportedMediaType
+		message = "Images must fit within 10000 pixels per side and 25 megapixels; GIFs allow up to 200 frames and 25 million total frame pixels."
+	default:
+		return nil, false
+	}
+	return apperr.New(status, string(invalid.Code), message), true
 }
 
 // invalidNewUser answers 400 with the specific reason from CreateUserRequest.Normalize.

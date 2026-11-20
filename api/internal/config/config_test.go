@@ -2,6 +2,19 @@ package config
 
 import "testing"
 
+func TestMFAEnabledDefaultsAndExplicitPause(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		enabled bool
+		invalid bool
+	}{{"", true, false}, {"true", true, false}, {"false", false, false}, {" false ", false, false}, {"typo", false, true}} {
+		got, err := parseMFAEnabled(tc.value)
+		if (err != nil) != tc.invalid || (!tc.invalid && got != tc.enabled) {
+			t.Fatalf("%q got %v %v", tc.value, got, err)
+		}
+	}
+}
+
 func clearMail(t *testing.T) {
 	for _, k := range []string{"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_ENCRYPTION",
 		"MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_ENCRYPTION", "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME"} {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AuthApiError, login } from "@/lib/auth-api";
+import { AuthApiError, login, type LoginResponse, type MFAChallenge } from "@/lib/auth-api";
+import { MfaStep } from "./login/mfa-step";
 import { startSession } from "@/lib/auth-session";
 import { notify } from "@/lib/notify";
 import { CaptchaField } from "./login/captcha-field";
@@ -25,6 +26,14 @@ export function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [identityPicks, setIdentityPicks] = useState(0);
   const captcha = useCaptcha();
+  const [mfa, setMfa] = useState<MFAChallenge | null>(null);
+
+  function completeLogin(response: LoginResponse) {
+    startSession(response, rememberDevice);
+    setPassword("");
+    notify.success(`Welcome back, ${response.user.first_name}.`);
+    if (pathname === "/login") router.replace("/");
+  }
 
   const handleRoleSelect = (role: RolePreset) => {
     setEmail(role.email);
@@ -53,10 +62,8 @@ export function LoginPage() {
         captcha_id: captcha.captcha.captcha_id,
         captcha_answer: captcha.answer,
       });
-      startSession(response, rememberDevice);
-      setPassword("");
-      notify.success(`Welcome back, ${response.user.first_name}.`);
-      if (pathname === "/login") router.replace("/");
+      if ("challenge_token" in response) { setMfa(response); setPassword(""); return; }
+      completeLogin(response);
     } catch (error) {
       setErrorMessage(error instanceof AuthApiError ? error.message : "Sign-in failed. Try again.");
       void captcha.reload();
@@ -64,6 +71,8 @@ export function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  if (mfa) return <main className="login-page"><div className="login-wrapper"><section className="login-card"><MfaStep key={mfa.challenge_token} challenge={mfa} onComplete={completeLogin} onCancel={() => { setMfa(null); void captcha.reload(); }} /></section></div></main>;
 
   return (
     <main className="login-page">

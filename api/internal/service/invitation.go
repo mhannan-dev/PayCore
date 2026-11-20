@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"html/template"
-	"log"
 	"strings"
 	"time"
 
@@ -26,28 +25,25 @@ var ErrInvitation = errors.New("invitation invalid or expired")
 var ErrWeakPassword = ErrPasswordLength
 
 type InvitationStore interface {
-	CreateInvitedUser(ctx context.Context, firstName string, lastName *string, email string, roles []string, tokenHash []byte, expires time.Time, createdBy string) (model.ManagedUser, error)
-	ReissueInvitation(ctx context.Context, userID string, tokenHash []byte, expires time.Time, createdBy string) (model.ManagedUser, error)
+	CreateInvitedUser(ctx context.Context, firstName string, lastName *string, email string, roles []string, tokenHash []byte, expires time.Time, createdBy string, draft ...model.EmailDraft) (model.ManagedUser, error)
+	ReissueInvitation(ctx context.Context, userID string, tokenHash []byte, expires time.Time, createdBy string, draft ...model.EmailDraft) (model.ManagedUser, error)
 	FindInvitation(ctx context.Context, tokenHash []byte) (model.InvitationInfo, error)
 	AcceptInvitation(ctx context.Context, tokenHash []byte, passwordHash string) (string, error)
-	// RecordEmail stores one delivery attempt's outcome (status: pending, sent, failed, not_configured).
-	RecordEmail(ctx context.Context, tokenHash []byte, status, emailError string) error
 }
 
 // InvitationService invites users by email and lets them set their own password.
-// Emails go through an injected delivery queue with a shared lifecycle.
+// Email intent is stored atomically with each invitation.
 type InvitationService struct {
-	EmailQueue
-	store  InvitationStore
-	appURL string
+	emailEnabled bool
+	store        InvitationStore
+	appURL       string
 	// Audit, when set, records invitations sent, re-sent and accepted.
 	Audit audit.Recorder
 }
 
-// NewInvitationService requires a queue; an unconfigured queue creates invitations
-// without sending mail.
-func NewInvitationService(store InvitationStore, queue EmailQueue, appURL string) *InvitationService {
-	return &InvitationService{EmailQueue: queue, store: store, appURL: strings.TrimRight(appURL, "/")}
+// NewInvitationService receives delivery configuration; workers own delivery.
+func NewInvitationService(store InvitationStore, emailEnabled bool, appURL string) *InvitationService {
+	return &InvitationService{emailEnabled: emailEnabled, store: store, appURL: strings.TrimRight(appURL, "/")}
 }
 
 // Invite creates the user (already normalized by the caller) and queues the invitation
@@ -58,13 +54,14 @@ func (s *InvitationService) Invite(ctx context.Context, req model.CreateUserRequ
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
-	u, err = s.store.CreateInvitedUser(ctx, req.FirstName, req.LastName, req.Email, req.Roles, digest, time.Now().UTC().Add(InvitationTTL), invitedBy)
+	expires := time.Now().UTC().Add(InvitationTTL)
+	u, err = s.store.CreateInvitedUser(ctx, req.FirstName, req.LastName, req.Email, req.Roles, digest, expires, invitedBy, s.draft(token, expires))
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
 	audit.Record(ctx, s.Audit, audit.Event{Action: audit.UserInvited, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email),
 		Details: audit.Details{RolesAfter: u.Roles}})
-	return s.dispatch(ctx, u, token, digest)
+	return s.queued(u)
 }
 
 // Resend replaces the user's outstanding invitation with a fresh link and queues the email.
@@ -73,36 +70,28 @@ func (s *InvitationService) Resend(ctx context.Context, userID, invitedBy string
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
-	u, err = s.store.ReissueInvitation(ctx, userID, digest, time.Now().UTC().Add(InvitationTTL), invitedBy)
+	expires := time.Now().UTC().Add(InvitationTTL)
+	u, err = s.store.ReissueInvitation(ctx, userID, digest, expires, invitedBy, s.draft(token, expires))
 	if err != nil {
 		return model.ManagedUser{}, "", err
 	}
 	audit.Record(ctx, s.Audit, audit.Event{Action: audit.InvitationResent, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
-	return s.dispatch(ctx, u, token, digest)
+	return s.queued(u)
 }
 
-// dispatch records "not_configured" right away, or starts background delivery.
-func (s *InvitationService) dispatch(ctx context.Context, u model.ManagedUser, token string, digest []byte) (model.ManagedUser, string, error) {
-	record := func(ctx context.Context, status, emailError string) {
-		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if err := s.store.RecordEmail(recordCtx, digest, status, emailError); err != nil {
-			log.Printf("invitation email status for user %s not recorded: %v", u.ID, err)
-		}
+func (s *InvitationService) draft(token string, expires time.Time) model.EmailDraft {
+	if !s.emailEnabled {
+		return nil
 	}
-	status := EmailPending
-	if !s.Configured() {
-		status = EmailNotConfigured
-		record(ctx, status, "no mail server is configured")
-	} else {
-		msg, err := s.message(u, token)
-		if err != nil {
-			return u, "", err
-		}
-		if err := s.Enqueue(ctx, "invitation email for user "+u.ID, msg, record); err != nil {
-			status = EmailFailed
-			record(ctx, status, "mail queue unavailable; resend the invitation")
-		}
+	return func(recipient model.EmailRecipient) (model.EmailContent, error) {
+		msg, err := s.message(model.ManagedUser{FirstName: recipient.FirstName, Email: recipient.Email, InviteExpiresAt: &expires}, token)
+		return model.EmailContent{To: msg.To, Subject: msg.Subject, Text: msg.Text, HTML: msg.HTML}, err
+	}
+}
+func (s *InvitationService) queued(u model.ManagedUser) (model.ManagedUser, string, error) {
+	status := EmailNotConfigured
+	if s.emailEnabled {
+		status = EmailPending
 	}
 	u.InviteEmailStatus = &status
 	return u, status, nil

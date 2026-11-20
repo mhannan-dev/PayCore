@@ -80,6 +80,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	if result.MFA != nil {
+		response.OK(c, result.MFA)
+		return
+	}
 	response.OK(c, result)
 }
 

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"paycore/api/internal/helpers"
 	"strings"
 	"syscall"
 	"time"
@@ -18,7 +17,9 @@ import (
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
 	"paycore/api/internal/handler"
+	"paycore/api/internal/helpers"
 	"paycore/api/internal/mailer"
+	"paycore/api/internal/mfa"
 	"paycore/api/internal/repository"
 	"paycore/api/internal/server"
 	"paycore/api/internal/service"
@@ -36,8 +37,8 @@ func main() {
 	// Composition root: the only place that creates concrete repositories, services
 	// and handlers and wires them together (docs/coding_rules.md rule 25).
 	var handlers server.Handlers
-	var invites *service.InvitationService
-	var resets *service.PasswordResetService
+	var emailCancel context.CancelFunc
+	var emailDone chan struct{}
 	if !*listRoutes {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := database.Open(ctx, cfg.DatabaseURL)
@@ -54,13 +55,21 @@ func main() {
 			log.Fatal("Database migration failed; API startup stopped.")
 		}
 		challenges := service.NewCaptchaStore()
-		authService, err := service.NewAuthService(repository.NewUserRepository(pool), challenges)
+		authenticator, err := mfa.New(cfg.MFAEncryptionKey)
+		if err != nil {
+			log.Fatal("MFA_ENCRYPTION_KEY is missing or invalid. Run go run ./cmd/mfa-key from api, or configure a base64-encoded 32-byte key.")
+		}
+		mfaService := service.NewMFAServiceWithMFAPolicy(repository.NewMFARepository(pool), authenticator, cfg.MFAEnabled)
+		handlers.MFA = handler.NewMFAHandler(mfaService)
+		authService, err := service.NewAuthServiceWithMFAPolicy(repository.NewUserRepositoryWithMFAPolicy(pool, cfg.MFAEnabled), challenges, mfaService, cfg.MFAEnabled)
 		if err != nil {
 			log.Fatal("Authentication initialization failed.")
 		}
 		auditLog := repository.NewAuditRepository(pool)
+		mfaService.Audit = auditLog
 		authService.Audit = auditLog
 		guard := handler.NewGuard(authService)
+		handlers.Security = handler.NewSecurityHandler(service.NewSecurityServiceWithMFAPolicy(repository.NewSecurityRepositoryWithMFAPolicy(pool, cfg.MFAEnabled), authenticator, cfg.MFAEnabled), guard)
 		handlers.Auth = handler.NewAuthHandler(authService, challenges)
 		handlers.Audit = handler.NewAuditHandler(auditLog, guard)
 		files, err := storage.OpenLocal(cfg.UploadDir)
@@ -68,7 +77,11 @@ func main() {
 			log.Fatal("Upload storage initialization failed. Check UPLOAD_DIR permissions.")
 		}
 		defer files.Close()
-		handlers.Attachments = handler.NewAttachmentHandler(guard, repository.NewAttachmentRepository(pool), files, service.NewPhotoService(repository.NewAttachmentRepository(pool), files), helpers.NewWebPConverter(2))
+		attachments := repository.NewAttachmentRepository(pool)
+		attachmentService := service.NewAttachmentService(attachments, files, helpers.NewWebPConverter(2))
+		handlers.Attachments = handler.NewAttachmentHandler(guard, attachmentService, service.NewPhotoService(attachments, files))
+		handlers.Matching = handler.NewMatchingHandler(service.NewMatchingService(repository.NewMatchingRepository(pool)), guard)
+		handlers.Statements = handler.NewStatementHandler(service.NewStatementService(attachmentService, repository.NewLedgerRepository(pool), repository.NewStatementRepository(pool)), guard)
 		var mail mailer.Sender
 		switch {
 		case cfg.SMTPHost != "":
@@ -84,12 +97,16 @@ func main() {
 		default:
 			log.Println("Email: SMTP_HOST is not set; invitations are created but not emailed")
 		}
-		queue := service.NewMailOutbox(mail)
-		invites = service.NewInvitationService(repository.NewInvitationRepository(pool), queue, cfg.AppURL)
+		queue := service.NewEmailWorker(repository.NewEmailOutboxRepository(pool), mail)
+		workerCtx, workerCancel := context.WithCancel(context.Background())
+		emailCancel = workerCancel
+		emailDone = make(chan struct{})
+		go func() { defer close(emailDone); queue.Run(workerCtx) }()
+		invites := service.NewInvitationService(repository.NewInvitationRepository(pool), mail != nil, cfg.AppURL)
 		invites.Audit = auditLog
 		handlers.Users = handler.NewUsersHandler(service.NewUserAdminService(repository.NewRBACRepository(pool), invites), guard)
 		handlers.Invitations = handler.NewInvitationHandler(invites)
-		resets = service.NewPasswordResetService(repository.NewPasswordResetRepository(pool), challenges, queue, cfg.AppURL)
+		resets := service.NewPasswordResetService(repository.NewPasswordResetRepository(pool), challenges, mail != nil, cfg.AppURL)
 		resets.Audit = auditLog
 		handlers.PasswordResets = handler.NewPasswordResetHandler(resets)
 		handlers.Ledger = handler.NewLedgerHandler(service.NewLedgerService(repository.NewLedgerRepository(pool)), guard)
@@ -146,13 +163,14 @@ func main() {
 	defer cancel()
 
 	shutdownErr := srv.Shutdown(ctx)
-	// Let in-flight emails finish; invitations cut short stay "pending" and can be re-sent.
+	// Cancel SMTP and leave unfinished claims recoverable by the next process.
 	mailCtx, mailCancel := context.WithTimeout(context.Background(), 15*time.Second)
-	if invites != nil {
-		invites.Shutdown(mailCtx)
-	}
-	if resets != nil {
-		resets.Shutdown(mailCtx)
+	if emailCancel != nil {
+		emailCancel()
+		select {
+		case <-emailDone:
+		case <-mailCtx.Done():
+		}
 	}
 	mailCancel()
 	if shutdownErr != nil {

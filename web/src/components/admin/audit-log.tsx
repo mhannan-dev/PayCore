@@ -24,6 +24,20 @@ const ACTION_INFO: Record<AuditAction, { label: string; tone: BadgeTone }> = {
   user_deleted: { label: "User deleted", tone: "amber" },
   password_reset_requested: { label: "Reset requested", tone: "neutral" },
   password_reset_completed: { label: "Password reset", tone: "green" },
+  mfa_enrolled: { label: "Authenticator enrolled", tone: "green" },
+  mfa_verified: { label: "MFA verified", tone: "green" },
+  mfa_failed: { label: "MFA failed", tone: "amber" },
+  mfa_recovery_used: { label: "Recovery code used", tone: "amber" },
+  mfa_recovery_regenerated: { label: "Recovery codes regenerated", tone: "amber" },
+  mfa_replacement_started: { label: "Authenticator replacement started", tone: "amber" },
+  mfa_replaced: { label: "Authenticator replaced", tone: "amber" },
+  statement_matching_configured: { label: "Matching configured", tone: "neutral" },
+  statement_match_confirmed: { label: "Statement matched", tone: "neutral" },
+  statement_match_rejected: { label: "Match rejected", tone: "neutral" },
+  statement_match_reset: { label: "Match reset", tone: "neutral" },
+  statement_exception_noted: { label: "Exception noted", tone: "neutral" },
+  statement_imported: { label: "Statement imported", tone: "neutral" },
+  sessions_revoked: { label: "Sessions revoked", tone: "neutral" },
 };
 
 const FAILURE_REASONS: Record<string, string> = {
@@ -46,6 +60,17 @@ function summary(e: AuditEvent): string {
       return `Had roles: ${roles(e.details.roles_before)}`;
     case "login_failed":
       return e.details.reason ? FAILURE_REASONS[e.details.reason] ?? e.details.reason : "";
+    case "mfa_recovery_regenerated": return "Previous recovery codes invalidated";
+    case "mfa_replacement_started": return "Current authenticator stays active until confirmation";
+    case "mfa_replaced": return `${e.details.count ?? 0} other sessions revoked; old recovery codes invalidated`;
+    case "statement_matching_configured":
+    case "statement_match_confirmed":
+    case "statement_match_rejected":
+    case "statement_match_reset":
+    case "statement_exception_noted": return e.details.reason ?? "";
+    case "statement_imported": return `${e.details.count ?? 0} statement rows imported`;
+    case "sessions_revoked": return `${e.details.count ?? 0} sessions revoked`;
+    case "mfa_failed": return e.details.reason === "security_verification_failed" ? "Account security verification failed" : "Verification rejected";
     default:
       return "";
   }

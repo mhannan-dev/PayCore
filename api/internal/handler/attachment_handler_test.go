@@ -84,6 +84,13 @@ func TestAttachmentsIntegration(t *testing.T) {
 	ownerToken, otherToken := strings.Repeat("a", 64), strings.Repeat("b", 64)
 	for token, userID := range map[string]string{ownerToken: owner.ID, otherToken: other.ID} {
 		digest := sha256.Sum256([]byte(token))
+		if userID == other.ID {
+			// Fixture represents an admin who has already completed MFA.
+			if _, err = pool.Exec(ctx, "INSERT INTO auth_sessions(token_hash,user_id,expires_at,mfa_verified) VALUES($1,$2,$3,TRUE)", digest[:], userID, time.Now().Add(time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		if err = users.CreateSession(ctx, userID, hash, digest[:], time.Now().Add(time.Hour)); err != nil {
 			t.Fatal(err)
 		}
@@ -92,13 +99,14 @@ func TestAttachmentsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := storage.OpenLocal(t.TempDir())
+	uploadDirectory := t.TempDir()
+	files, err := storage.OpenLocal(uploadDirectory)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer files.Close()
 	repo := repository.NewAttachmentRepository(pool)
-	router := server.New(pool, server.Handlers{Auth: handler.NewAuthHandler(auth, nil), Attachments: handler.NewAttachmentHandler(handler.NewGuard(auth), repo, files, service.NewPhotoService(repo, files), helpers.NewWebPConverter(2))})
+	router := server.New(pool, server.Handlers{Auth: handler.NewAuthHandler(auth, nil), Attachments: handler.NewAttachmentHandler(handler.NewGuard(auth), service.NewAttachmentService(repo, files, helpers.NewWebPConverter(2)), service.NewPhotoService(repo, files))})
 	request := func(method, path, token, contentType string, body []byte) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, bytes.NewReader(body))
 		if token != "" {
@@ -209,5 +217,65 @@ func TestAttachmentsIntegration(t *testing.T) {
 	}
 	if w := request("GET", "/api/v1/attachments/not-a-uuid", ownerToken, "", nil); w.Code != 400 {
 		t.Fatal("invalid attachment id accepted")
+	}
+	for _, tc := range []struct {
+		name, content string
+		count, status int
+		code          string
+	}{
+		{"empty.txt", "", 1, 413, "file_size_must_be_1_byte_to_10_mib"},
+		{"vector.svg", "<svg></svg>", 1, 415, "unsupported_image"},
+		{"multiple.txt", "text", 2, 400, "one_file_required"},
+	} {
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		for i := 0; i < tc.count; i++ {
+			part, err := form.CreateFormFile("file", tc.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = part.Write([]byte(tc.content)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := form.Close(); err != nil {
+			t.Fatal(err)
+		}
+		w := request("POST", "/api/v1/attachments", ownerToken, form.FormDataContentType(), body.Bytes())
+		if w.Code != tc.status || errorCode(t, w) != tc.code {
+			t.Fatalf("validation response for %s: %d %s", tc.name, w.Code, w.Body)
+		}
+	}
+	// A definite database failure must remove the bytes already written to disk.
+	before, err := os.ReadDir(uploadDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `CREATE FUNCTION reject_attachment() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture metadata failure'; END $$;
+	 CREATE TRIGGER reject_attachment BEFORE INSERT ON attachments FOR EACH ROW EXECUTE FUNCTION reject_attachment()`); err != nil {
+		t.Fatal(err)
+	}
+	var rejected bytes.Buffer
+	writer := multipart.NewWriter(&rejected)
+	part, err := writer.CreateFormFile("file", "rejected.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = part.Write([]byte("do not retain this upload")); err != nil {
+		t.Fatal(err)
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w = request("POST", "/api/v1/attachments", ownerToken, writer.FormDataContentType(), rejected.Bytes())
+	if w.Code != 500 || strings.Contains(w.Body.String(), "fixture metadata failure") {
+		t.Fatalf("metadata failure response: %d %s", w.Code, w.Body)
+	}
+	after, err := os.ReadDir(uploadDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatal("database rejection left an orphan upload")
 	}
 }

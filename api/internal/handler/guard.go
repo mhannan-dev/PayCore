@@ -9,6 +9,7 @@ import (
 	"paycore/api/internal/apperr"
 	"paycore/api/internal/audit"
 	"paycore/api/internal/model"
+	"paycore/api/internal/service"
 )
 
 // SessionVerifier resolves a bearer token to the signed-in user (implemented by
@@ -47,13 +48,20 @@ func NewGuard(sessions SessionVerifier) *Guard { return &Guard{sessions: session
 
 // Session requires a valid bearer session. It bounds the request with a
 // timeout, stores the user for callerOrAbort, and names them as the audit actor.
-func (g *Guard) Session() gin.HandlerFunc { return g.check("") }
+func (g *Guard) Session() gin.HandlerFunc { return g.check(nil, false) }
 
 // Require requires a valid session whose roles grant permission. Permissions
 // are read on every request, so role changes apply immediately.
-func (g *Guard) Require(permission string) gin.HandlerFunc { return g.check(permission) }
+func (g *Guard) Require(permission model.PermissionCode) gin.HandlerFunc {
+	return g.RequireAll(permission)
+}
 
-func (g *Guard) check(permission string) gin.HandlerFunc {
+// RequireAll authenticates once and requires every named capability. Empty lists fail closed.
+func (g *Guard) RequireAll(permissions ...model.PermissionCode) gin.HandlerFunc {
+	return g.check(permissions, true)
+}
+
+func (g *Guard) check(permissions []model.PermissionCode, required bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		if g == nil || g.sessions == nil {
@@ -67,8 +75,18 @@ func (g *Guard) check(permission string) gin.HandlerFunc {
 			fail(c, err)
 			return
 		}
-		if permission != "" && !model.HasPermission(u.Permissions, permission) {
-			fail(c, apperr.Forbidden("permission_denied", "Your roles do not grant the "+permission+" permission."))
+		if u.ID == "" {
+			fail(c, service.ErrSession)
+			return
+		}
+		allowed := !required || len(permissions) > 0
+		for _, permission := range permissions {
+			if !permission.Valid() || !model.HasPermission(u.Permissions, string(permission)) {
+				allowed = false
+			}
+		}
+		if !allowed {
+			fail(c, apperr.Forbidden("permission_denied", "Your roles do not grant the required permission."))
 			return
 		}
 		authenticatedUser.set(c, u)
@@ -82,3 +100,6 @@ func noStore(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Next()
 }
+
+// sessionUser fails closed with an empty identity if middleware was omitted.
+func sessionUser(c *gin.Context) model.UserDTO { user, _ := authenticatedUser.get(c); return user }

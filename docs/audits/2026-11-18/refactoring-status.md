@@ -43,3 +43,18 @@ Tests cover real PostgreSQL password-reset/session ordering, mail capacity and
 shutdown, photo ownership and image policy, strict JSON validation, converter
 admission before buffering, and bounded audit contexts with Unicode metadata.
 Repository/handler integration tests use isolated schemas via `DATABASE_TEST_URL`.
+
+## Follow-up: 19 November 2026
+
+The in-memory email queue has been replaced by a PostgreSQL transactional outbox
+for invitations, resends and password resets. Durable claims, lease fencing, retries,
+stale-token cancellation and terminal-body removal are implemented and tested.
+The earlier in-memory-queue limitation above describes the audit snapshot and is
+now addressed. See [email delivery](../../email_outbox.md) for operating details.
+
+The general attachment workflows have also moved into an injected
+`AttachmentService`. Handlers retain multipart/HTTP handling; the service owns
+validation/conversion orchestration, ownership and local-content checks, storage
+and metadata coordination. Definite metadata failures remove the new bytes with
+a bounded cleanup context; uncertain commits preserve them. See
+[attachment architecture and cleanup](../../attachments.md#service-boundary-and-upload-failures).

@@ -12,13 +12,13 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"net/http"
 	"path"
 	"strings"
 
 	"github.com/HugoSmits86/nativewebp"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
+	"paycore/api/internal/model"
 	"paycore/api/internal/storage"
 )
 
@@ -75,24 +75,24 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 	case c.slots <- struct{}{}:
 		defer func() { <-c.slots }()
 	default:
-		return nil, "", &UploadError{http.StatusServiceUnavailable, "image_conversion_busy"}
+		return nil, "", &model.UploadError{Code: model.UploadImageBusy}
 	}
 	data, err := io.ReadAll(io.LimitReader(source, storage.MaxFileSize+1))
 	if err != nil {
-		return nil, "", &UploadError{http.StatusBadRequest, "invalid_image"}
+		return nil, "", &model.UploadError{Code: model.UploadInvalidImage}
 	}
 	if len(data) == 0 || int64(len(data)) > storage.MaxFileSize {
 		return nil, "", storage.ErrFileSize
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, "", &UploadError{http.StatusUnsupportedMediaType, "unsupported_image"}
+		return nil, "", &model.UploadError{Code: model.UploadUnsupportedImage}
 	}
 	if !ValidImageSize(cfg) {
-		return nil, "", &UploadError{http.StatusUnsupportedMediaType, "image_dimensions_exceeded"}
+		return nil, "", &model.UploadError{Code: model.UploadImageDimensions}
 	}
 	if uploadImageFormat(format) == imageFormatWebP && len(data) >= 21 && string(data[12:16]) == "VP8X" && data[20]&2 != 0 {
-		return nil, "", &UploadError{http.StatusUnsupportedMediaType, "unsupported_animated_image"}
+		return nil, "", &model.UploadError{Code: model.UploadUnsupportedAnimation}
 	}
 	var out imageBuffer
 	switch uploadImageFormat(format) {
@@ -107,7 +107,7 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 		}
 	case imageFormatJPEG, imageFormatPNG, imageFormatBMP, imageFormatTIFF, imageFormatWebP:
 		if uploadImageFormat(format) == imageFormatPNG && animatedPNG(data) {
-			return nil, "", &UploadError{http.StatusUnsupportedMediaType, "unsupported_animated_image"}
+			return nil, "", &model.UploadError{Code: model.UploadUnsupportedAnimation}
 		}
 		var decoded image.Image
 		decoded, _, err = image.Decode(bytes.NewReader(data))
@@ -115,13 +115,13 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 			err = nativewebp.Encode(&out, decoded, &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed})
 		}
 	default:
-		return nil, "", &UploadError{http.StatusUnsupportedMediaType, "unsupported_image"}
+		return nil, "", &model.UploadError{Code: model.UploadUnsupportedImage}
 	}
 	if out.overflow {
 		return nil, "", storage.ErrFileSize
 	}
 	if err != nil {
-		return nil, "", &UploadError{http.StatusBadRequest, "invalid_image"}
+		return nil, "", &model.UploadError{Code: model.UploadInvalidImage}
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, "", err
@@ -167,7 +167,7 @@ func animatedPNG(data []byte) bool {
 
 // Preflight GIF block sizes before DecodeAll allocates frame pixel buffers.
 func checkGIFBudget(data []byte, cfg image.Config) error {
-	invalid := &UploadError{http.StatusBadRequest, "invalid_image"}
+	invalid := &model.UploadError{Code: model.UploadInvalidImage}
 	if len(data) < 13 {
 		return invalid
 	}
@@ -197,7 +197,7 @@ func checkGIFBudget(data []byte, cfg image.Config) error {
 			}
 			frames++
 			if frames > 200 || int64(frames)*int64(cfg.Width)*int64(cfg.Height) > maxImagePixels {
-				return &UploadError{http.StatusUnsupportedMediaType, "image_dimensions_exceeded"}
+				return &model.UploadError{Code: model.UploadImageDimensions}
 			}
 			packed := data[pos+8]
 			pos += 9

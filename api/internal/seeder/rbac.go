@@ -31,6 +31,9 @@ func DefaultRoles() []RoleDefinition {
 
 func DefaultPermissions() []PermissionDefinition {
 	return []PermissionDefinition{
+		{Code: model.PermReconciliationMatch, Name: "Review Own Statement Matches", Description: "Confirm and reject statement matches and record exception notes"},
+		{Code: model.PermReconciliationRead, Name: "Read Own Statements", Description: "View owned statement imports"},
+		{Code: model.PermReconciliationImport, Name: "Import Own Statements", Description: "Validate and import owned CSV statements"},
 		{Code: model.PermUsersRead, Name: "Read Users", Description: "View user profiles, roles, and status"},
 		{Code: model.PermUsersWrite, Name: "Manage Users", Description: "Create, update, and assign roles to users"},
 		{Code: model.PermTransfersRead, Name: "Read Transfers", Description: "View transfer history and journal entries"},
@@ -44,12 +47,18 @@ func DefaultPermissions() []PermissionDefinition {
 		{Code: model.PermSimulatorRun, Name: "Run Simulator", Description: "Execute idempotency and load simulation tools"},
 		{Code: model.PermSystemRead, Name: "Read System Status", Description: "View system health, database, and broker metrics"},
 		{Code: model.PermAccountsWrite, Name: "Manage Accounts", Description: "Create ledger accounts in the chart of accounts"},
+		{Code: model.PermAttachmentsRead, Name: "Read Own Attachments", Description: "List and download attachments owned by the signed-in user"},
+		{Code: model.PermAttachmentsWrite, Name: "Upload Own Attachments", Description: "Upload files and assign the signed-in user photo"},
+		{Code: model.PermAttachmentsDelete, Name: "Delete Own Attachments", Description: "Soft-delete attachments owned by the signed-in user"},
 	}
 }
 
 func DefaultRolePermissions() map[string][]string {
 	return map[string][]string{
 		model.RoleAdmin: {
+			model.PermReconciliationMatch,
+			model.PermReconciliationRead, model.PermReconciliationImport,
+			model.PermAttachmentsRead, model.PermAttachmentsWrite, model.PermAttachmentsDelete,
 			model.PermUsersRead, model.PermUsersWrite,
 			model.PermTransfersRead, model.PermTransfersCreate, model.PermTransfersReverse,
 			model.PermLedgerRead,
@@ -60,6 +69,9 @@ func DefaultRolePermissions() map[string][]string {
 			model.PermAccountsWrite,
 		},
 		model.RoleLeadOperator: {
+			model.PermReconciliationMatch,
+			model.PermReconciliationRead, model.PermReconciliationImport,
+			model.PermAttachmentsRead, model.PermAttachmentsWrite, model.PermAttachmentsDelete,
 			model.PermAccountsWrite,
 			model.PermUsersRead,
 			model.PermTransfersRead, model.PermTransfersCreate, model.PermTransfersReverse,
@@ -68,16 +80,22 @@ func DefaultRolePermissions() map[string][]string {
 			model.PermReportsRead,
 		},
 		model.RoleOperator: {
+			model.PermReconciliationMatch,
+			model.PermReconciliationRead, model.PermReconciliationImport,
+			model.PermAttachmentsRead, model.PermAttachmentsWrite, model.PermAttachmentsDelete,
 			model.PermTransfersRead, model.PermTransfersCreate,
 			model.PermLedgerRead,
 		},
 		model.RoleComplianceAuditor: {
+			model.PermReconciliationRead,
+			model.PermAttachmentsRead, model.PermAttachmentsWrite, model.PermAttachmentsDelete,
 			model.PermTransfersRead,
 			model.PermLedgerRead,
 			model.PermAuditRead, model.PermAuditVerify,
 			model.PermReportsRead, model.PermReportsExport,
 		},
 		model.RoleStaffEngineer: {
+			model.PermAttachmentsRead, model.PermAttachmentsWrite, model.PermAttachmentsDelete,
 			model.PermLedgerRead,
 			model.PermAuditRead,
 			model.PermSimulatorRun,
