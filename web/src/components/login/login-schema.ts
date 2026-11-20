@@ -1,6 +1,6 @@
 import { boolean, object, string, type InferType } from "yup";
 
-// Mirrors the API's LoginRequest binding (api/internal/model/auth.go).
+// Mirrors the API's LoginRequest binding (api/internal/models/auth.go).
 export const loginSchema = object({
   email: string()
     .trim()

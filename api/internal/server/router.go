@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 	"paycore/api/internal/audit"
-	"paycore/api/internal/handler"
-	"paycore/api/internal/middleware"
-	"paycore/api/pkg/response"
+	"paycore/api/internal/http/controllers"
+	"paycore/api/internal/http/middleware"
+	"paycore/api/internal/http/responses"
+	"paycore/api/routes"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,34 +15,20 @@ type DatabasePinger interface {
 	Ping(context.Context) error
 }
 
-// Handlers are the route handlers wired by cmd/server (the composition root).
-// A nil handler is replaced by one without dependencies, whose routes answer 503,
-// so the full route table exists for discovery (`-routes`) and tests.
-type Handlers struct {
-	Matching       *handler.MatchingHandler
-	Statements     *handler.StatementHandler
-	Security       *handler.SecurityHandler
-	MFA            *handler.MFAHandler
-	Auth           *handler.AuthHandler
-	Attachments    *handler.AttachmentHandler
-	Users          *handler.UsersHandler
-	Invitations    *handler.InvitationHandler
-	PasswordResets *handler.PasswordResetHandler
-	Audit          *handler.AuditHandler
-	Ledger         *handler.LedgerHandler
-}
+// Controllers holds the endpoint dependencies passed to the API routes.
+type Controllers = routes.Controllers
 
-// SetupRouter builds a router with only the auth handler (tests, route discovery).
-func SetupRouter(db DatabasePinger, authHandlers ...*handler.AuthHandler) *gin.Engine {
-	var h Handlers
-	if len(authHandlers) > 0 {
-		h.Auth = authHandlers[0]
+// SetupRouter builds a router with only the auth controller (tests, route discovery).
+func SetupRouter(db DatabasePinger, authControllers ...*controllers.AuthController) *gin.Engine {
+	var h Controllers
+	if len(authControllers) > 0 {
+		h.Auth = authControllers[0]
 	}
 	return New(db, h)
 }
 
 // New builds the API router. db may be nil; readiness then answers 503.
-func New(db DatabasePinger, h Handlers) *gin.Engine {
+func New(db DatabasePinger, h Controllers) *gin.Engine {
 	r := gin.New()
 	_ = r.SetTrustedProxies(nil)
 
@@ -50,12 +37,12 @@ func New(db DatabasePinger, h Handlers) *gin.Engine {
 	// Panics are logged by gin and answered with the standard JSON error envelope.
 	r.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
 		c.Abort()
-		response.InternalError(c)
+		responses.InternalError(c)
 	}))
 	// Unknown routes and wrong methods get JSON too, not gin's plain-text defaults.
 	r.HandleMethodNotAllowed = true
-	r.NoRoute(response.RouteNotFound)
-	r.NoMethod(response.MethodNotAllowed)
+	r.NoRoute(responses.RouteNotFound)
+	r.NoMethod(responses.MethodNotAllowed)
 
 	r.Use(corsMiddleware())
 	// Audit events record where each request came from.
@@ -69,50 +56,43 @@ func New(db DatabasePinger, h Handlers) *gin.Engine {
 	registerHealthRoutes(r, db)
 
 	if h.Auth == nil {
-		h.Auth = handler.NewAuthHandler(nil, nil)
+		h.Auth = controllers.NewAuthController(nil, nil)
 	}
 	if h.Attachments == nil {
-		h.Attachments = handler.NewAttachmentHandler(nil, nil, nil)
+		h.Attachments = controllers.NewAttachmentController(nil, nil)
 	}
 	if h.Users == nil {
-		h.Users = handler.NewUsersHandler(nil, nil)
+		h.Users = controllers.NewUsersController(nil)
 	}
 	if h.Invitations == nil {
-		h.Invitations = handler.NewInvitationHandler(nil)
+		h.Invitations = controllers.NewInvitationController(nil)
 	}
 	if h.PasswordResets == nil {
-		h.PasswordResets = handler.NewPasswordResetHandler(nil)
+		h.PasswordResets = controllers.NewPasswordResetController(nil)
 	}
 	if h.Audit == nil {
-		h.Audit = handler.NewAuditHandler(nil, nil)
+		h.Audit = controllers.NewAuditController(nil)
 	}
 	if h.Ledger == nil {
-		h.Ledger = handler.NewLedgerHandler(nil, nil)
+		h.Ledger = controllers.NewLedgerController(nil)
 	}
 
 	v1 := r.Group("/api/v1")
 	if h.Security == nil {
-		h.Security = handler.NewSecurityHandler(nil, nil)
+		h.Security = controllers.NewSecurityController(nil)
 	}
-	h.Security.Register(v1)
 	if h.MFA == nil {
-		h.MFA = handler.NewMFAHandler(nil)
+		h.MFA = controllers.NewMFAController(nil)
 	}
-	h.MFA.Register(v1)
-	h.Auth.Register(v1)
-	h.Attachments.Register(v1)
-	h.Users.Register(v1)
-	h.Invitations.Register(v1)
-	h.PasswordResets.Register(v1)
-	h.Audit.Register(v1)
-	h.Ledger.Register(v1)
 	if h.Statements == nil {
-		h.Statements = handler.NewStatementHandler(nil, nil)
+		h.Statements = controllers.NewStatementController(nil)
 	}
-	h.Statements.Register(v1)
 	if h.Matching == nil {
-		h.Matching = handler.NewMatchingHandler(nil, nil)
+		h.Matching = controllers.NewMatchingController(nil)
 	}
-	h.Matching.Register(v1)
+	if h.AuthMiddleware == nil {
+		h.AuthMiddleware = middleware.NewAuth(nil)
+	}
+	routes.Register(v1, h)
 	return r
 }

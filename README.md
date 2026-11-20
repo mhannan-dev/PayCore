@@ -65,7 +65,7 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 ```text
 ┌────────────────────────┐   HTTPS / JSON   ┌──────────────────────────┐        ┌──────────────┐
 │  web/  Next.js 16      │ ───────────────▶ │  api/  Go 1.27 + Gin     │ ─────▶ │ PostgreSQL 16│
-│  React 19, TypeScript  │   Bearer token   │  handler → service →     │  pgx   │ (migrations) │
+│  React 19, TypeScript  │   Bearer token   │  controller → service →  │  pgx   │ (migrations) │
 │  Tailwind 4, yup       │ ◀─────────────── │  repository              │        └──────────────┘
 └────────────────────────┘                  │  mail outbox ──▶ SMTP    │ ─────▶  Mailpit (dev) /
                                             └──────────────────────────┘         SMTP provider
@@ -83,9 +83,9 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 .
 ├── api/                 Go API
 │   ├── cmd/             server, seed-users, create-user, grant-system-admin, mail-check
-│   ├── internal/        config, handler, service, repository, model, mailer, storage, …
-│   ├── migrations/      versioned SQL migrations (embedded and applied at startup)
-│   └── pkg/response/    standard JSON responses and error envelope
+│   ├── internal/        http/{controllers,middleware,requests,responses}, models, services, repositories, …
+│   ├── database/        migrations (embedded SQL) and seeders
+│   └── routes/          per-resource API routes, middleware and permissions
 ├── web/                 Next.js console (src/app routes, src/components, src/lib)
 ├── docs/                feature, setup and design documentation
 ├── compose.yaml         PostgreSQL and Mailpit for local development
@@ -225,6 +225,8 @@ Full endpoint references: [authentication](docs/email_login.md), [RBAC, users, i
 
 ## Development
 
+Run all tests and required checks from the repository root with `./test.ps1`. Public Go tests live in `api/tests/`, frontend tests in `web/tests/`, and private Go unit tests beside their packages. See [Testing](docs/testing.md) for individual suites and database integration setup.
+
 ```powershell
 # Web: type check + type-aware lint
 cd web; npm run check
@@ -237,7 +239,7 @@ go test ./...
 golangci-lint run          # config in api/.golangci.yml
 ```
 
-All changes follow the [coding rules](docs/coding_rules.md): type safety, thin handlers, dependency injection with consumer-side interfaces, and centralized error handling. The local database password above is a development-only default from `compose.yaml`; never reuse it anywhere else.
+All changes follow the [coding rules](docs/coding_rules.md): type safety, thin controllers, dependency injection with consumer-side interfaces, and centralized error handling. The local database password above is a development-only default from `compose.yaml`; never reuse it anywhere else.
 
 ## Documentation
 

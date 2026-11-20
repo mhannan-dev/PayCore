@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"paycore/api/database/migrations"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
-	"paycore/api/internal/model"
-	"paycore/api/internal/repository"
-	"paycore/api/internal/service"
-	"paycore/api/migrations"
+	"paycore/api/internal/models"
+	"paycore/api/internal/repositories"
+	"paycore/api/internal/services"
 
 	"golang.org/x/term"
 )
@@ -38,7 +38,7 @@ func main() {
 	if err != nil || address.Address != email || len(email) > 254 || len(firstName) == 0 || len([]rune(firstName)) > 80 || len([]rune(lastNameValue)) > 80 {
 		log.Fatal("Provide a valid -email, a -first-name of 1 to 80 characters, and an optional -last-name of at most 80 characters.")
 	}
-	roles, err := model.NormalizeRoles(strings.Split(rolesInput, ","))
+	roles, err := models.NormalizeRoles(strings.Split(rolesInput, ","))
 	if err != nil {
 		log.Fatal("Provide at least one valid role using -roles.")
 	}
@@ -57,7 +57,7 @@ func main() {
 	if err != nil || string(password) != string(confirmation) {
 		log.Fatal("Passwords did not match.")
 	}
-	hash, err := service.HashPassword(string(password))
+	hash, err := services.HashPassword(string(password))
 	clear(password)
 	clear(confirmation)
 	if err != nil {
@@ -74,7 +74,7 @@ func main() {
 	if err = migrations.Apply(ctx, pool); err != nil {
 		log.Fatal("Database migration failed.")
 	}
-	u, err := repository.NewUserRepository(pool).Create(ctx, firstName, lastName, email, hash, roles)
+	u, err := repositories.NewUserRepository(pool).Create(ctx, firstName, lastName, email, hash, roles)
 	if err != nil {
 		log.Fatal("User creation failed. Verify the email is not already registered.")
 	}

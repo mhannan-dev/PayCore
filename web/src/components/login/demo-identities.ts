@@ -7,7 +7,7 @@ export interface RolePreset {
   badge: "green" | "amber" | "neutral";
 }
 
-// Mirrors api/internal/seeder/users.go SampleUsers(). The seeder has no built-in
+// Mirrors api/database/seeders/users.go SampleUsers(). The seeder has no built-in
 // password. Development autofill is configured only through local environment.
 export const PRESET_ROLES: RolePreset[] = [
   { id: "admin", name: "Admin Admin", email: "admin@yopmail.com", roleTitle: "Admin", roles: ["ADMIN", "OPERATOR"], badge: "green" },

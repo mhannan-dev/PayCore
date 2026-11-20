@@ -65,20 +65,27 @@ flowchart TB
     SETTLE -->|"Idempotent financial commands"| GIN
 ```
 
-Each service owns its database and migrations; consumers never read or write Ledger Core tables directly. Reporting projections are eventually consistent, while balance checks and authoritative zero-sum audits remain in Ledger Core. Notification and reporting failures must not roll back committed transfers. The outbox relay is a Ledger Core worker, not a separate business service. An optional gateway handles routing and token validation; each service still enforces authorization.
+Each service owns its database and migrations; consumers never read or write Ledger Core tables directly. Reporting projections are eventually consistent, while balance checks and authoritative zero-sum audits remain in Ledger Core. Notification and reporting failures must not roll back committed transfers. The outbox relay is a Ledger Core worker, not a separate business services. An optional gateway handles routing and token validation; each service still enforces authorization.
 
 ### Repository Directory Structure
 ```text
 PayCore/
 ├── api/                             # Ledger Core service (existing Go/Gin scaffold)
 │   ├── cmd/server/main.go           # Application entrypoint
+│   ├── routes/                      # API route mappings, middleware and permissions
+│   ├── database/
+│   │   ├── migrations/              # Embedded PostgreSQL migrations
+│   │   └── seeders/                 # Explicit user and RBAC seeders
 │   ├── internal/
-│   │   ├── handler/                 # Gin HTTP Handlers (REST Controllers)
-│   │   ├── middleware/              # Idempotency, CORS, Tracing, Auth
-│   │   ├── service/                 # Ledger, Transfer, and Account business logic
-│   │   ├── repository/              # PostgreSQL (pgx/sqlc) queries with row locks
-│   │   ├── model/                   # Domain entities and DTOs
-│   │   └── outbox/                  # Outbox event publisher worker
+│   │   ├── http/
+│   │   │   ├── controllers/         # HTTP request handling
+│   │   │   ├── middleware/          # Request IDs, logging, rate limits and errors
+│   │   │   ├── requests/            # Strict JSON binding
+│   │   │   └── responses/           # JSON responses and error envelopes
+│   │   ├── services/                # Business logic
+│   │   ├── repositories/            # PostgreSQL queries and transactions
+│   │   ├── models/                  # Domain types and shared DTOs
+│   │   └── outbox/                  # Planned outbox event publisher worker
 │   ├── pkg/
 │   │   └── money/                   # Precision money types (JPY, USD, zero-decimal handling)
 │   ├── Dockerfile
@@ -128,7 +135,7 @@ PayCore/
 * **The Problem**: Network timeouts, retries, and mobile client disconnects frequently cause duplicate transfer requests.
 * **Two-Tier Defense**:
   1. **Tier 1 (Optional Redis Cache)**: Cache completed responses under the authenticated `(client_id, key)` scope, including a request hash. Redis is an optimization; cache misses, outages, or TTL expiry must fall through to PostgreSQL and never authorize a second execution.
-  2. **Tier 2 (PostgreSQL Atomic Invariant)**: The `idempotency_records` primary key is `(client_id, key)`. Claim the key inside the same ACID transaction as the journal, postings, outbox event, and final response. Concurrent inserts serialize through the unique constraint. After completion, a matching retry returns the stored status and response without re-executing postings; a different request hash returns `422 Unprocessable Entity`. Hash the HTTP method, normalized route (including target IDs), and canonical validated body. Derive `client_id` from authentication, never from the request body. Retain records for the supported retry lifetime; deleting them permits key reuse and requires an explicit retention policy.
+  2. **Tier 2 (PostgreSQL Atomic Invariant)**: The `idempotency_records` primary key is `(client_id, key)`. Claim the key inside the same ACID transaction as the journal, postings, outbox event, and final responses. Concurrent inserts serialize through the unique constraint. After completion, a matching retry returns the stored status and response without re-executing postings; a different request hash returns `422 Unprocessable Entity`. Hash the HTTP method, normalized route (including target IDs), and canonical validated body. Derive `client_id` from authentication, never from the request body. Retain records for the supported retry lifetime; deleting them permits key reuse and requires an explicit retention policy.
 * **In-Flight Requests**: A duplicate may wait for the first transaction, or receive `409 Conflict` with `Retry-After` if the bounded wait expires. Retrying the same key after completion returns the saved result. Rollback removes the claim along with all financial effects.
 
 ### 2.3 Deterministic Concurrency Control
@@ -172,7 +179,7 @@ The frontend provides an interactive, institutional-grade administrative console
 
 ### 3.4 Idempotency & Fault Injection Simulator (Demo Mode)
 * Specially built for technical interview demonstrations:
-  * **"Spam Duplicate Request" Button**: Fires 5 parallel asynchronous requests with the identical `Idempotency-Key` to demonstrate that only 1 transfer is committed. Requests that exceed the in-flight wait receive `409` and retry the same key; completed replays receive the identical stored successful response.
+  * **"Spam Duplicate Request" Button**: Fires 5 parallel asynchronous requests with the identical `Idempotency-Key` to demonstrate that only 1 transfer is committed. Requests that exceed the in-flight wait receive `409` and retry the same key; completed replays receive the identical stored successful responses.
   * **"Tampered Payload" Test**: Sends the same key with altered amounts to show immediate `422 Unprocessable Entity` rejection.
 
 ### 3.5 Frontend Tech Stack Details

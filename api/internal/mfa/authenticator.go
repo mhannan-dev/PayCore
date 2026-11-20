@@ -17,7 +17,7 @@ import (
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
-	"paycore/api/internal/model"
+	"paycore/api/internal/models"
 )
 
 type Authenticator struct{ cipher cipher.AEAD }
@@ -37,10 +37,10 @@ func New(key string) (*Authenticator, error) {
 	}
 	return &Authenticator{cipher: aead}, nil
 }
-func (a *Authenticator) Enrollment(userID, email string) (model.MFAEnrollment, []byte, error) {
+func (a *Authenticator) Enrollment(userID, email string) (models.MFAEnrollment, []byte, error) {
 	secret := make([]byte, 20)
 	if _, err := rand.Read(secret); err != nil {
-		return model.MFAEnrollment{}, nil, err
+		return models.MFAEnrollment{}, nil, err
 	}
 	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secret)
 	uri := url.URL{Scheme: "otpauth", Host: "totp", Path: "/PayCore:" + email}
@@ -48,22 +48,22 @@ func (a *Authenticator) Enrollment(userID, email string) (model.MFAEnrollment, [
 	uri.RawQuery = query.Encode()
 	png, err := qrcode.Encode(uri.String(), qrcode.Medium, 256)
 	if err != nil {
-		return model.MFAEnrollment{}, nil, err
+		return models.MFAEnrollment{}, nil, err
 	}
 	nonce := make([]byte, a.cipher.NonceSize())
 	if _, err = rand.Read(nonce); err != nil {
-		return model.MFAEnrollment{}, nil, err
+		return models.MFAEnrollment{}, nil, err
 	}
 	encrypted := a.cipher.Seal(nonce, nonce, secret, []byte(userID))
-	return model.MFAEnrollment{Secret: encoded, URI: uri.String(), QRImage: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)}, encrypted, nil
+	return models.MFAEnrollment{Secret: encoded, URI: uri.String(), QRImage: "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)}, encrypted, nil
 }
 func (a *Authenticator) Match(userID string, encrypted []byte, code string, last int64, now time.Time) (int64, error) {
 	if len(code) != 6 {
-		return -1, model.ErrMFACode
+		return -1, models.ErrMFACode
 	}
 	for _, c := range code {
 		if c < '0' || c > '9' {
-			return -1, model.ErrMFACode
+			return -1, models.ErrMFACode
 		}
 	}
 	if len(encrypted) < a.cipher.NonceSize() {
@@ -79,7 +79,7 @@ func (a *Authenticator) Match(userID string, encrypted []byte, code string, last
 			return counter, nil
 		}
 	}
-	return -1, model.ErrMFACode
+	return -1, models.ErrMFACode
 }
 func otp(secret []byte, counter int64, digits int) string {
 	if counter < 0 {

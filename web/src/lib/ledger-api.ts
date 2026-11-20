@@ -1,4 +1,4 @@
-// Ledger Core API client. Types mirror api/internal/model/ledger.go (coding rule 4).
+// Ledger Core API client. Types mirror api/internal/models/ledger.go (coding rule 4).
 // Amounts and balances are strings of minor units ("50000"); use lib/money.ts.
 import { request, type Page } from "./auth-api";
 
@@ -109,7 +109,7 @@ export const reverseJournal = (token: string, idempotencyKey: string, journalId:
 export const fetchZeroSum = (token: string, currency: Currency) =>
   request<ZeroSumReport>(`/audit/zero-sum?${params({ currency })}`, { token });
 
-// Mirrors model/statement.go. CSV input amounts are major units; these API
+// Mirrors api/internal/models/statement.go. CSV input amounts are major units; these API
 // amounts and totals are always integer minor-unit strings.
 export type StatementEntry = { booked_date: string; reference: string; currency: Currency; amount: string; direction: Direction; description: string };
 export type StatementRow = { row_number: number; values: string[]; entry: StatementEntry | null; errors: string[] };

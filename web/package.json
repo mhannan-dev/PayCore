@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check": "tsc --noEmit && eslint",
+    "test": "node --test tests/*.test.mjs",
     "test:rbac": "node --test tests/rbac.test.mjs"
   },
   "dependencies": {

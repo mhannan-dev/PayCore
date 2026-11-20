@@ -14,7 +14,7 @@ The double-entry ledger described in [ProjectFeature.md](../ProjectFeature.md) Â
 - `journal_entries` and `ledger_postings` reject `UPDATE`, `DELETE` and `TRUNCATE`.
 - Postings can only be added to a journal created in the same transaction.
 - A reversal must mirror its original exactly (same accounts and amounts, opposite sides); `reversal_for_id` is unique, so a journal can be reversed once.
-- An idempotency record cannot commit without its stored response.
+- An idempotency record cannot commit without its stored responses.
 
 ## Transfers
 
@@ -69,7 +69,7 @@ Errors: `400 invalid_transfer` / `unbalanced_transfer` / `idempotency_key_requir
 
 ## Development data
 
-`cd api; go run ./cmd/seed-ledger` creates five JPY accounts (operating bank, two wallets, payout clearing, fee revenue) and posts six sample journals through the service. Re-running is safe (fixed idempotency keys). Journals are append-only: to remove them, rebuild the database.
+`cd api; go run ./cmd/seed-ledger` creates five JPY accounts (operating bank, two wallets, payout clearing, fee revenue) and posts six sample journals through the services. Re-running is safe (fixed idempotency keys). Journals are append-only: to remove them, rebuild the database.
 
 ## Not yet implemented
 

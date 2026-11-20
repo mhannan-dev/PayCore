@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"paycore/api/database/migrations"
+	"paycore/api/database/seeders"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
-	"paycore/api/internal/repository"
-	"paycore/api/internal/seeder"
-	"paycore/api/migrations"
+	"paycore/api/internal/repositories"
 )
 
 func main() {
@@ -29,10 +29,10 @@ func main() {
 	if err = migrations.Apply(ctx, pool); err != nil {
 		log.Fatal(err)
 	}
-	if err = seeder.GrantSystemAdmin(ctx, pool, *email); err != nil {
+	if err = seeders.GrantSystemAdmin(ctx, pool, *email); err != nil {
 		log.Fatal(err)
 	}
-	u, err := repository.NewUserRepository(pool).FindByEmail(ctx, *email)
+	u, err := repositories.NewUserRepository(pool).FindByEmail(ctx, *email)
 	if err != nil {
 		log.Fatal("Access granted, but verification failed.")
 	}

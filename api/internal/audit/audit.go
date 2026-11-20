@@ -84,7 +84,7 @@ type Event struct {
 	UserAgent   *string   `json:"user_agent"`
 }
 
-// Recorder stores events (implemented by repository.AuditRepository).
+// Recorder stores events (implemented by repositories.AuditRepository).
 type Recorder interface {
 	Record(ctx context.Context, e Event) error
 }

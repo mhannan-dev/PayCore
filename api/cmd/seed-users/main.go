@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"golang.org/x/term"
+	"paycore/api/database/migrations"
+	"paycore/api/database/seeders"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
-	"paycore/api/internal/seeder"
-	"paycore/api/migrations"
 )
 
 func main() {
@@ -61,12 +61,12 @@ func main() {
 	if err = migrations.Apply(ctx, pool); err != nil {
 		log.Fatal("Database migration failed; seeding stopped.")
 	}
-	if err = seeder.RBAC(ctx, pool); err != nil {
+	if err = seeders.RBAC(ctx, pool); err != nil {
 		log.Fatal("RBAC seeding failed; seeding stopped.")
 	}
-	seed := seeder.Users
+	seed := seeders.Users
 	if *refresh {
-		seed = seeder.RefreshUsers
+		seed = seeders.RefreshUsers
 	}
 	results, err := seed(ctx, pool, password)
 	if err != nil {

@@ -30,7 +30,7 @@ mail server accepted the message; it does not prove delivery to a remote inbox.
   to the usual validation when the link is opened.
 - Outcomes are `pending`, `sending`, `sent`, `failed`, `not_configured` or `canceled`.
   Invitation status and attempt count are updated in the same transaction as the
-  outbox result. Reset requests keep their existing generic public response.
+  outbox result. Reset requests keep their existing generic public responses.
 
 Delivery is **at least once**. A crash after SMTP acceptance but before the outcome
 commit can cause a duplicate email. SMTP and PostgreSQL cannot share a transaction;

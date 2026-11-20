@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"paycore/api/internal/model"
+	"paycore/api/internal/models"
 )
 
 func TestRFC6238SHA1Vectors(t *testing.T) {
@@ -49,13 +49,13 @@ func TestEnrollmentEncryptionBindingAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.Match("owner", encrypted, code, counter, now); !errors.Is(err, model.ErrMFACode) {
+	if _, err = a.Match("owner", encrypted, code, counter, now); !errors.Is(err, models.ErrMFACode) {
 		t.Fatal("replayed time step accepted")
 	}
 	if _, err = a.Match("other", encrypted, code, -1, now); err == nil {
 		t.Fatal("ciphertext could be moved to another user")
 	}
-	if _, err = a.Match("owner", encrypted, code, -1, now.Add(2*time.Minute)); !errors.Is(err, model.ErrMFACode) {
+	if _, err = a.Match("owner", encrypted, code, -1, now.Add(2*time.Minute)); !errors.Is(err, models.ErrMFACode) {
 		t.Fatal("expired code accepted")
 	}
 }

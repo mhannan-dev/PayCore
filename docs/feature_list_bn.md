@@ -194,7 +194,7 @@ Endpoint ও storage ব্যবহারের বিস্তারিত: [U
 
 ## ১৪. কাজের অগ্রাধিকার
 
-1. **Account API:** PostgreSQL setup/migration → account model/repository/service/handler → `POST /api/v1/accounts` → account detail/history।
+1. **Account API:** PostgreSQL setup/migration → account models/repositories/services/controllers → `POST /api/v1/accounts` → account detail/history।
 2. **Ledger Core:** money validation → double-entry posting → locking/overdraft → idempotency → reversal → zero-sum audit।
 3. **Core events ও dashboard:** outbox/broker → transfer studio → ledger explorer → replay demo।
 4. **Reporting + Notification:** independent databases → event consumers → inbox/retry/replay → frontend integration।

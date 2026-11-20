@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"paycore/api/pkg/response"
+	"paycore/api/internal/http/responses"
 )
 
 // corsMiddleware configures browser access from WEB_ORIGINS and the environment.
@@ -30,7 +30,7 @@ func corsMiddleware() gin.HandlerFunc {
 		origin := c.GetHeader("Origin")
 		c.Header("Vary", "Origin")
 		if origin != "" && !allowedOrigins[origin] && !(allowAnyLoopback && isLoopbackOrigin(origin)) {
-			response.Abort(c, http.StatusForbidden, "origin_not_allowed", "This browser origin is not allowed to call the API.")
+			responses.Abort(c, http.StatusForbidden, "origin_not_allowed", "This browser origin is not allowed to call the API.")
 			return
 		}
 		if origin != "" {
@@ -52,22 +52,22 @@ func corsMiddleware() gin.HandlerFunc {
 func registerHealthRoutes(r *gin.Engine, db DatabasePinger) {
 	// Health check endpoint
 	r.GET("/", func(c *gin.Context) {
-		response.OK(c, gin.H{
+		responses.OK(c, gin.H{
 			"service": "PayCore API",
 			"status":  "running",
 		})
 	})
 	r.GET("/health/live", func(c *gin.Context) {
-		response.OK(c, gin.H{"status": "alive"})
+		responses.OK(c, gin.H{"status": "alive"})
 	})
 	r.GET("/health/ready", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 		if db == nil || db.Ping(ctx) != nil {
-			response.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "not_ready", "database": "unavailable"})
+			responses.JSON(c, http.StatusServiceUnavailable, gin.H{"status": "not_ready", "database": "unavailable"})
 			return
 		}
-		response.OK(c, gin.H{"status": "ready", "database": "connected"})
+		responses.OK(c, gin.H{"status": "ready", "database": "connected"})
 	})
 }
 

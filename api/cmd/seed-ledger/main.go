@@ -16,33 +16,33 @@ import (
 	"log"
 	"time"
 
+	"paycore/api/database/migrations"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
-	"paycore/api/internal/model"
-	"paycore/api/internal/repository"
-	"paycore/api/internal/service"
-	"paycore/api/migrations"
+	"paycore/api/internal/models"
+	"paycore/api/internal/repositories"
+	"paycore/api/internal/services"
 )
 
 // seedActor scopes the seed's idempotency keys; it is not a real user.
-var seedActor = model.UserDTO{ID: "00000000-0000-4000-8000-000000000001", Email: "seed-ledger@paycore.local"}
+var seedActor = models.UserDTO{ID: "00000000-0000-4000-8000-000000000001", Email: "seed-ledger@paycore.local"}
 
 type accountSeed struct {
 	number, name string
-	typ          model.AccountType
+	typ          models.AccountType
 }
 
 var chart = []accountSeed{
-	{"1001", "Operating bank", model.AccountAsset},
-	{"2001", "Akira · Wallet", model.AccountLiability},
-	{"2002", "Hana · Wallet", model.AccountLiability},
-	{"2003", "Payout clearing", model.AccountLiability},
-	{"4001", "Platform fee revenue", model.AccountRevenue},
+	{"1001", "Operating bank", models.AccountAsset},
+	{"2001", "Akira · Wallet", models.AccountLiability},
+	{"2002", "Hana · Wallet", models.AccountLiability},
+	{"2003", "Payout clearing", models.AccountLiability},
+	{"4001", "Platform fee revenue", models.AccountRevenue},
 }
 
 type journalSeed struct {
 	ref, description, debit, credit string
-	amount                          model.Amount
+	amount                          models.Amount
 }
 
 var journals = []journalSeed{
@@ -66,16 +66,16 @@ func main() {
 	if err := migrations.Apply(ctx, pool); err != nil {
 		log.Fatalf("Database migration failed: %v", err)
 	}
-	repo := repository.NewLedgerRepository(pool)
-	ledger := service.NewLedgerService(repo)
+	repo := repositories.NewLedgerRepository(pool)
+	ledger := services.NewLedgerService(repo)
 
 	ids := map[string]string{}
 	for _, a := range chart {
-		account, err := ledger.CreateAccount(ctx, model.UserDTO{}, model.CreateAccountRequest{
-			AccountNumber: a.number, Name: a.name, Type: a.typ, Currency: model.CurrencyJPY,
+		account, err := ledger.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{
+			AccountNumber: a.number, Name: a.name, Type: a.typ, Currency: models.CurrencyJPY,
 		})
 		status := "created"
-		if errors.Is(err, repository.ErrAccountNumberTaken) {
+		if errors.Is(err, repositories.ErrAccountNumberTaken) {
 			account, err = findAccount(ctx, ledger, a.number)
 			status = "exists"
 		}
@@ -87,11 +87,11 @@ func main() {
 	}
 
 	for _, j := range journals {
-		result, err := ledger.Transfer(ctx, seedActor, "seed-ledger-"+j.ref, model.TransferRequest{
-			ReferenceID: j.ref, Description: j.description, Currency: model.CurrencyJPY,
-			Legs: []model.Leg{
-				{AccountID: ids[j.debit], Direction: model.Debit, Amount: j.amount},
-				{AccountID: ids[j.credit], Direction: model.Credit, Amount: j.amount},
+		result, err := ledger.Transfer(ctx, seedActor, "seed-ledger-"+j.ref, models.TransferRequest{
+			ReferenceID: j.ref, Description: j.description, Currency: models.CurrencyJPY,
+			Legs: []models.Leg{
+				{AccountID: ids[j.debit], Direction: models.Debit, Amount: j.amount},
+				{AccountID: ids[j.credit], Direction: models.Credit, Amount: j.amount},
 			},
 		})
 		if err != nil {
@@ -104,22 +104,22 @@ func main() {
 		fmt.Printf("journal %s %-30s ¥%-8s %s\n", j.ref, j.description, j.amount, status)
 	}
 
-	report, err := ledger.ZeroSum(ctx, model.CurrencyJPY)
+	report, err := ledger.ZeroSum(ctx, models.CurrencyJPY)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("zero-sum JPY: debits %s, credits %s, balanced=%t\n", report.TotalDebits, report.TotalCredits, report.Balanced)
 }
 
-func findAccount(ctx context.Context, ledger *service.LedgerService, number string) (model.Account, error) {
-	accounts, _, err := ledger.Accounts(ctx, model.AccountQuery{Search: number, Limit: 50})
+func findAccount(ctx context.Context, ledger *services.LedgerService, number string) (models.Account, error) {
+	accounts, _, err := ledger.Accounts(ctx, models.AccountQuery{Search: number, Limit: 50})
 	if err != nil {
-		return model.Account{}, err
+		return models.Account{}, err
 	}
 	for _, a := range accounts {
 		if a.AccountNumber == number {
 			return a, nil
 		}
 	}
-	return model.Account{}, repository.ErrAccountNotFound
+	return models.Account{}, repositories.ErrAccountNotFound
 }

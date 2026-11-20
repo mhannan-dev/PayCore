@@ -52,7 +52,7 @@ From `api/`:
 ```powershell
 go test ./...
 $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/paycore?sslmode=disable'
-go test ./internal/database -run TestPostgresIntegration -v
+go test ./tests/database -run TestPostgresIntegration -v
 ```
 
 The integration test connects through the pool, writes and reads a temporary table inside a rolled-back transaction, and leaves no application table behind.

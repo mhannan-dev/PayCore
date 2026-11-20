@@ -1,7 +1,7 @@
 // Package apperr carries HTTP-ready errors through the API without coupling the
 // inner layers to HTTP. Services and repositories return plain sentinel errors;
 // a Table (owned by internal/server) maps them to an *Error, and the error
-// middleware writes the standard envelope. Handlers create *Error values directly
+// middleware writes the standard envelope. Controllers create *Error values directly
 // only for request-shape problems (malformed IDs, bad query parameters).
 package apperr
 
@@ -54,7 +54,7 @@ func (e *Error) WithHeader(name, value string) *Error {
 	return &c
 }
 
-// Shorthands for request-shape errors raised by handlers.
+// Shorthands for request-shape errors raised by controllers.
 func BadRequest(code, message string) *Error { return New(http.StatusBadRequest, code, message) }
 func NotFound(code, message string) *Error   { return New(http.StatusNotFound, code, message) }
 func Forbidden(code, message string) *Error  { return New(http.StatusForbidden, code, message) }

@@ -1,4 +1,4 @@
-// Permission codes (mirror api/internal/model/rbac.go). The API enforces them;
+// Permission codes (mirror api/internal/models/rbac.go). The API enforces them;
 // the web app uses them to hide navigation and guard pages.
 export const PERMISSIONS = {
   reconciliationMatch: "reconciliation:match",

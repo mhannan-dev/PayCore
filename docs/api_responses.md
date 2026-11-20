@@ -1,22 +1,22 @@
 # API response helpers
 
-Use `paycore/api/pkg/response` from handlers and middleware. JSON serialization
-is centralized in `response.JSON`; prefer named helpers for common statuses.
+Use `paycore/api/internal/http/responses` from controllers and middleware. JSON serialization
+is centralized in `responses.JSON`; prefer named helpers for common statuses.
 
 ```go
-import "paycore/api/pkg/response"
+import "paycore/api/internal/http/responses"
 
-response.OK(c, user)                    // 200, resource body
-response.Created(c, attachment)         // 201, resource body
-response.List(c, items, limit, offset)  // 200, items/limit/offset; nil items become []
-response.NoContent(c)                   // 204, no body
+responses.OK(c, user)                    // 200, resource body
+responses.Created(c, attachment)         // 201, resource body
+responses.List(c, items, limit, offset)  // 200, items/limit/offset; nil items become []
+responses.NoContent(c)                   // 204, no body
 ```
 
-Return after an error in a handler:
+Return after an error in a controller:
 
 ```go
 if err != nil {
-    response.BadRequest(c, "invalid_request", "Check the submitted fields.")
+    responses.BadRequest(c, "invalid_request", "Check the submitted fields.")
     return
 }
 ```
@@ -32,15 +32,15 @@ Errors use this envelope; `details` is optional:
 {"error":"invalid_request","message":"Check the submitted fields."}
 ```
 
-Middleware must stop the handler chain when rejecting a request:
+Middleware must stop the controller chain when rejecting a request:
 
 ```go
-response.Abort(c, http.StatusForbidden, "access_denied", "Access denied.")
+responses.Abort(c, http.StatusForbidden, "access_denied", "Access denied.")
 return
 ```
 
-`response.Error` writes a response without aborting the chain; `response.Abort`
-does both. Headers such as `Retry-After` must be set before writing the response.
+`responses.Error` writes a response without aborting the chain; `responses.Abort`
+does both. Headers such as `Retry-After` must be set before writing the responses.
 
 Health endpoints preserve their existing status/database bodies through `OK`
 or `JSON`. File downloads continue to stream bytes rather than return JSON.

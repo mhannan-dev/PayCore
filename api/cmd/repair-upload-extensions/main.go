@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"paycore/api/database/migrations"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
 	"paycore/api/internal/storage"
-	"paycore/api/migrations"
 )
 
 type legacyFile struct {

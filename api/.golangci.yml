@@ -23,16 +23,16 @@ linters:
       rules:
         no-gin-below-transport:
           files:
-            - "**/internal/service/**/*.go"
-            - "**/internal/repository/**/*.go"
-            - "**/internal/model/**/*.go"
+            - "**/internal/services/**/*.go"
+            - "**/internal/repositories/**/*.go"
+            - "**/internal/models/**/*.go"
             - "**/internal/audit/**/*.go"
             - "**/internal/mailer/**/*.go"
             - "**/internal/storage/**/*.go"
             - "**/internal/config/**/*.go"
           deny:
             - pkg: "github.com/gin-gonic/gin"
-              desc: "*gin.Context stays in handler/, server/ and middleware/ (docs/coding_rules.md rule 24)"
+              desc: "*gin.Context stays in internal/http/, routes/ and internal/server/ (docs/coding_rules.md rule 24)"
     exhaustive:
       default-signifies-exhaustive: true
     govet:

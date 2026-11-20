@@ -20,7 +20,7 @@ import (
 	"github.com/HugoSmits86/nativewebp"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
-	"paycore/api/internal/model"
+	"paycore/api/internal/models"
 	"paycore/api/internal/storage"
 )
 
@@ -37,7 +37,7 @@ func uploadImageFixture(t *testing.T, filename string, data []byte) (UploadedFil
 	}
 	defer files.Close()
 
-	prepared, err := PrepareUpload(context.Background(), model.AttachmentUpload{FileName: filename, Content: bytes.NewReader(data)}, NewWebPConverter(2))
+	prepared, err := PrepareUpload(context.Background(), models.AttachmentUpload{FileName: filename, Content: bytes.NewReader(data)}, NewWebPConverter(2))
 	if err != nil {
 		return UploadedFile{}, nil, err
 	}
@@ -155,7 +155,7 @@ func TestInvalidImagesRejectedBeforeSaving(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := uploadImageFixture(t, tc.name, tc.data)
-			var validation *model.UploadError
+			var validation *models.UploadError
 			if !errors.As(err, &validation) || string(validation.Code) != tc.code {
 				t.Fatalf("got %v, want %s", err, tc.code)
 			}

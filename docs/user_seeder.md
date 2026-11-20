@@ -17,7 +17,7 @@ The command asks for a password and confirmation without echoing them. Developme
 | auditor@yopmail.com | Auditor | Auditor | COMPLIANCE_AUDITOR |
 | engineer@yopmail.com | Engineer | Engineer | STAFF_ENGINEER |
 
-The photo attachment link defaults to NULL and new users are active. All files/photos share the [attachments table](attachments.md). There is no `name` column. Fixtures live in `api/internal/seeder/users.go`.
+The photo attachment link defaults to NULL and new users are active. All files/photos share the [attachments table](attachments.md). There is no `name` column. Fixtures live in `api/database/seeders/users.go`.
 
 The command prints explicit `first_name`, `last_name`, `email`, `roles`, and `status` columns. An absent last name is printed as `NULL`. Seeder results also expose `first_name` and nullable `last_name` JSON fields; skipped users report their current database values rather than fixture defaults.
 

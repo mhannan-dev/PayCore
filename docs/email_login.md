@@ -2,7 +2,7 @@
 
 ## User model
 
-`api/internal/model/user.go` defines `User`: UUID `ID`, required `FirstName`, nullable `LastName` and `Photo`, normalized unique `Email`, `PasswordHash`, stored `Roles []string`, `IsActive`, `CreatedAt`, and `UpdatedAt`. `PasswordHash` has `json:"-"`; API responses use `UserDTO` and never return the hash. A login identity is separate from a financial ledger account.
+`api/internal/models/user.go` defines `User`: UUID `ID`, required `FirstName`, nullable `LastName` and `Photo`, normalized unique `Email`, `PasswordHash`, stored `Roles []string`, `IsActive`, `CreatedAt`, and `UpdatedAt`. `PasswordHash` has `json:"-"`; API responses use `UserDTO` and never return the hash. A login identity is separate from a financial ledger account.
 
 The SQL profile uses `first_name`, nullable `last_name`, and nullable `photo_attachment_id`; there is no `name` field. Photos share the unified [attachments table](attachments.md). API responses retain a derived `photo` URL and include `photo_attachment_id`. Migration 002 preserves an existing full display name as `first_name` without guessing how to split it. Migration 003 removes the redundant generated `name` column. Numbered `*.sql` files are automatically discovered and applied in version order.
 
@@ -27,7 +27,7 @@ Migration 005 changes the old scalar `role` into `roles TEXT[]`, preserving each
 
 ## API flow
 
-1. `GET /api/v1/auth/captcha` returns `captcha_id`, a PNG data URL in `image`, and `expires_in: 120`. Display the image and let the user type its six digits. The answer is not included in the response.
+1. `GET /api/v1/auth/captcha` returns `captcha_id`, a PNG data URL in `image`, and `expires_in: 120`. Display the image and let the user type its six digits. The answer is not included in the responses.
 2. Submit `POST /api/v1/auth/login` with JSON:
 
 ```json
@@ -61,7 +61,7 @@ Validly formatted CAPTCHA attempts consume the challenge atomically, even when w
 cd api
 go test ./...
 $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/paycore?sslmode=disable'
-go test ./internal/repository -run TestUserSessionPostgresIntegration -v
+go test ./tests/repositories -run TestUserSessionPostgresIntegration -v
 ```
 
 Tests cover single-use/expired/concurrently consumed CAPTCHA, password rejection, inactive/unknown users, token hashing/revocation, JSON hash exclusion, spoofed proxy headers, CORS, and database session expiry. Integration fixtures are removed after the test.

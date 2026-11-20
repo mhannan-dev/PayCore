@@ -3,7 +3,7 @@ package helpers
 import (
 	"context"
 	"errors"
-	"paycore/api/internal/model"
+	"paycore/api/internal/models"
 	"testing"
 )
 
@@ -20,7 +20,7 @@ func TestBusyConverterDoesNotBufferUpload(t *testing.T) {
 	defer func() { <-converter.slots }()
 	source := &unreadUpload{}
 	_, _, err := converter.Convert(context.Background(), source, "photo.png")
-	var uploadErr *model.UploadError
+	var uploadErr *models.UploadError
 	if !errors.As(err, &uploadErr) || source.read {
 		t.Fatalf("busy converter read upload or returned wrong error: %v", err)
 	}

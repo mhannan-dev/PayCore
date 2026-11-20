@@ -73,7 +73,7 @@ Clear a photo using `{"attachment_id":null}`. Assigning a photo does not delete 
 
 ## Service boundary and upload failures
 
-`AttachmentHandler` handles multipart parsing, request limits, UUID/pagination
+`AttachmentController` handles multipart parsing, request limits, UUID/pagination
 validation and response headers. It calls an injected `AttachmentService` for
 upload, listing, metadata, download, deletion and photo-content workflows. The
 service receives `context.Context`, a session-derived owner and plain stream/model
@@ -86,7 +86,7 @@ Storage is injected through `Write`, `Read` and `Remove` interfaces. Download
 ownership and local-file/photo policy are checked before opening any bytes. The
 service checks the opened file's size against metadata; failed validation closes
 the stream, while successful downloads transfer closing responsibility to the
-handler. Soft deletion keeps the existing retention policy.
+controllers. Soft deletion keeps the existing retention policy.
 
 Attachment creation uses an explicit database transaction. If metadata creation
 definitely fails, the service removes the newly stored file using a fresh cleanup
@@ -108,7 +108,7 @@ Deletion is logical: metadata gets `deleted_at`, listing/downloading excludes it
 cd api
 go test ./...
 $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/paycore?sslmode=disable'
-go test ./internal/handler -run TestAttachmentsIntegration -v
+go test ./tests/http/controllers -run TestAttachmentsIntegration -v
 ```
 
 The integration test uses a temporary database schema and upload directory. It exercises real sessions, uploads, downloads, owner isolation, photo validation/linking/clearing, soft deletion, validation responses and cleanup after an actual database rejection. Service tests cover canceled-request cleanup, cleanup failures, uncertain commits, unauthorized access, image-conversion rejection and closing streams after failed download validation.
