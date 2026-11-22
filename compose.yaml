@@ -27,5 +27,57 @@ services:
       - "127.0.0.1:8025:8025"
     restart: unless-stopped
 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      ENV: development
+      DATABASE_URL: postgres://paycore:paycore_local_dev@postgres:5432/paycore?sslmode=disable
+      MFA_ENABLED: "true"
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
+      WEB_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      APP_URL: http://localhost:3000
+      UPLOAD_DIR: /app/uploads
+      REDIS_URL: redis:6379
+      OUTBOX_PUBLISHER: log
+      OUTBOX_BATCH_SIZE: "50"
+      OUTBOX_MAX_RETRIES: "5"
+      OUTBOX_INTERVAL_SECONDS: "1"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - api_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  api_uploads:
