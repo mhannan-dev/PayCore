@@ -129,7 +129,7 @@ Admin sign-in → **Users & access** → user invite ও role নির্বা
 | ক্রম | যা আগে লাগবে | কাজ | সফল হলে পরের ধাপ |
 | --- | --- | --- | --- |
 | ১ | PayCore stack ও local config | `QUANTUM_ENABLED=true` এবং বাকি Quantum config মিলিয়ে API restart | `/api/v1/quantum/config`-এ `enabled:true` |
-| ২ | `quantum:read` ও `quantum:write`; নতুন seed admin-এ থাকে | **Quantum Payments** খুলুন | Setup form বা existing merchant profile |
+| ২ | `quantum:read` ও `quantum:write`; ডিফল্টে ADMIN আর ACCOUNTANT-এ থাকে | **Quantum Payments** খুলুন | Setup form বা existing merchant profile |
 | ৩ | Payment গ্রহণের testnet address | Merchant display name ও receiver address সংরক্ষণ | New invoice; receiver পরে পরিবর্তন করা যায় না |
 | ৪ | Positive tUSD8 amount, description, expiry ৫–১৪৪০ মিনিট | **New invoice** dialog submit | `PENDING` invoice ও checkout link |
 | ৫ | Invoice এখনও payable | Checkout link copy করে payer-কে দিন | নিচের payer workflow |
@@ -164,9 +164,9 @@ PayCore একটা ছোট payment বা wallet ব্যবসার **ope
 | আপনি যদি… | Role | PayCore দিয়ে যা করবেন |
 | --- | --- | --- |
 | **Administrator**, টিম ও প্ল্যাটফর্ম পরিচালনা করেন | `ADMIN` | মানুষ invite করা, role দেওয়া, account deactivate করা, account খোলা, transfer reverse করা, settlement চালানো, report দেখা, event outbox দেখা, failed event replay করা, idempotency simulator চালানো, audit log পড়া, আর নিচের সব কাজ |
-| **Accountant**, রোজকার লেনদেন সামলান | `ACCOUNTANT` | Account ও journal দেখা, balanced transfer পোস্ট করা |
-| **Compliance auditor**, হিসাব যাচাই করেন | `COMPLIANCE_AUDITOR` | Ledger পড়া, zero-sum audit চালানো, report দেখা ও export করা, audit trail দেখা। শুধু read-only |
-| **Merchant**, testnet-এ stablecoin নেন | `quantum:read` আর `quantum:write` আছে এমন যেকোনো role (ডিফল্টে ADMIN) | tUSD8 invoice বানানো, checkout link শেয়ার করা ([অংশ ৪](#৪-paycore-quantum-testnet-এ-tusd8-পেমেন্ট)) |
+| **Accountant**, রোজকার লেনদেন সামলান | `ACCOUNTANT` | Account ও journal দেখা, balanced transfer পোস্ট করা, statement import ও matching, report দেখা, settlement reserve, Quantum invoice |
+| **Compliance auditor**, হিসাব যাচাই করেন | `COMPLIANCE_AUDITOR` | Ledger পড়া, zero-sum audit চালানো, report দেখা ও export করা, audit trail আর event outbox দেখা। শুধু read-only |
+| **Merchant**, testnet-এ stablecoin নেন | `quantum:read` আর `quantum:write` আছে এমন যেকোনো role (ডিফল্টে ADMIN আর ACCOUNTANT) | tUSD8 invoice বানানো, checkout link শেয়ার করা ([অংশ ৪](#৪-paycore-quantum-testnet-এ-tusd8-পেমেন্ট)) |
 | **Payer**, merchant-কে টাকা দেবেন | কোনো account লাগবে না | Checkout link খুলে নিজের wallet থেকে পেমেন্ট করা |
 | **Developer বা student** | – | Production-মানের ledger শেখা: double-entry, idempotency, locking, RBAC, outbox ([ledger.md](ledger.md), [coding_rules.md](coding_rules.md)) |
 

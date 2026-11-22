@@ -9,7 +9,7 @@ import (
 )
 
 // TestDefaultRoleAccessMatrix pins the exact default grants of every built-in
-// role (migrations 026 and 027). Changing a role's access must change this test,
+// role (migrations 026-028). Changing a role's access must change this test,
 // docs/rbac.md and a migration together.
 func TestDefaultRoleAccessMatrix(t *testing.T) {
 	want := map[string][]string{

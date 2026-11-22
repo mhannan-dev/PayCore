@@ -82,8 +82,8 @@ func DefaultRolePermissions() map[string][]string {
 			models.PermAttachmentsRead, models.PermAttachmentsWrite, models.PermAttachmentsDelete,
 			models.PermTransfersRead, models.PermTransfersCreate,
 			models.PermLedgerRead,
-			models.PermReportsRead,                          // migration 027
-			models.PermQuantumRead, models.PermQuantumWrite, // migration 027; own merchant only
+			models.PermReportsRead,                          // migration 028
+			models.PermQuantumRead, models.PermQuantumWrite, // migration 028; own merchant only
 		},
 		models.RoleComplianceAuditor: {
 			models.PermUsersRead,
@@ -94,7 +94,7 @@ func DefaultRolePermissions() map[string][]string {
 			models.PermLedgerRead,
 			models.PermAuditRead, models.PermAuditVerify,
 			models.PermReportsRead, models.PermReportsExport,
-			models.PermSystemRead, // migration 027; read-only delivery health
+			models.PermSystemRead, // migration 028; read-only delivery health
 		},
 	}
 }

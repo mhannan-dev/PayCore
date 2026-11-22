@@ -40,14 +40,38 @@ grants when run, so do not use it to preserve intentional default-role revocatio
 | transfers:reverse | Y | — | — |
 | audit:read | Y | — | Y |
 | audit:verify | Y | — | Y |
-| reports:read | Y | — | Y |
+| reports:read | Y | Y | Y |
 | reports:export | Y | — | Y |
 | simulator:run | Y | — | — |
-| system:read | Y | — | — |
+| system:read | Y | — | Y |
 | system:write | Y | — | — |
 | attachments:read | Y | Y | Y |
 | attachments:write | Y | Y | Y |
 | attachments:delete | Y | Y | Y |
+| notifications:read | Y | Y | Y |
+| notifications:retry | Y | — | — |
+| reconciliation:read | Y | Y | Y |
+| reconciliation:import | Y | Y | — |
+| reconciliation:match | Y | Y | — |
+| quantum:read | Y | Y | — |
+| quantum:write | Y | Y | — |
+
+**What each role can open by default**
+
+| Role | Pages | Cannot (ADMIN only) |
+| --- | --- | --- |
+| ADMIN | Every page | – |
+| ACCOUNTANT | Overview, Accounts, Transfer studio, Reconciliation, Ledger explorer, Reports, Notifications, Settlements (view and reserve), Quantum Payments, Users & access (read) | Create accounts, reverse transfers, capture/release settlements, retry notifications, manage users, read the audit trail, outbox and simulator |
+| COMPLIANCE_AUDITOR | Overview, Accounts, Transfer studio (read), Reconciliation (read), Ledger explorer, Invariant audit, Reports (with export), Notifications, Settlements (read), Audit log, Event outbox (read), Users & access (read) | Any money movement, imports, matching, invoicing, replays and configuration |
+
+Migration `028_default_role_access.sql` gives every built-in role a working
+default after the 026 consolidation: ACCOUNTANT gains `reports:read` and
+`quantum:read`/`quantum:write` (testnet invoices, scoped to the caller's own
+merchant in SQL), and COMPLIANCE_AUDITOR gains read-only `system:read` for event
+delivery health. Separation of duties is unchanged: reversals, settlement
+capture/release, user management and system writes stay ADMIN-only. The seeder
+applies the same defaults, and `api/tests/database/seeders/role_access_test.go`
+pins the exact matrix.
 
 Migration `027_user_directory_read_access.sql` grants `users:read` to ACCOUNTANT
 and COMPLIANCE_AUDITOR on existing databases; the RBAC seeder applies the same
