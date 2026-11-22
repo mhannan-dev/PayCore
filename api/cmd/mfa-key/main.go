@@ -39,12 +39,14 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not open .env")
 	}
-	defer file.Close()
 	if _, err = file.WriteString("\nMFA_ENCRYPTION_KEY=" + base64.StdEncoding.EncodeToString(key[:]) + "\n"); err != nil {
 		log.Fatal("Could not save MFA key")
 	}
 	if err = file.Sync(); err != nil {
 		log.Fatal("Could not sync MFA key")
+	}
+	if err = file.Close(); err != nil {
+		log.Fatal("Could not close .env after saving the MFA key")
 	}
 	log.Println("MFA encryption key saved to .env; keep a secure backup")
 }

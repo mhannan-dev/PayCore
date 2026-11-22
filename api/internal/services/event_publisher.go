@@ -84,7 +84,7 @@ func (p *WebhookEventPublisher) Publish(ctx context.Context, event models.Outbox
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }() // Read-only: a close error cannot lose data.
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 
 	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {

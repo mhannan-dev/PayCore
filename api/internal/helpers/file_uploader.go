@@ -41,7 +41,7 @@ func PrepareUpload(ctx context.Context, input models.AttachmentUpload, images Im
 		return PreparedUpload{}, &models.UploadError{Code: models.UploadInvalidFile}
 	}
 	contentType := http.DetectContentType(prefix[:n])
-	var payload io.Reader = io.MultiReader(bytes.NewReader(prefix[:n]), input.Content)
+	payload := io.MultiReader(bytes.NewReader(prefix[:n]), input.Content)
 	if imageUpload(prefix[:n], contentType, input.DeclaredContentType, name) {
 		if images == nil {
 			return PreparedUpload{}, &models.UploadError{Code: models.UploadImageBusy}

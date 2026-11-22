@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
@@ -68,6 +70,10 @@ func (r *MatchingRepository) Report(ctx context.Context, owner, id string, limit
 			return out, scanErr
 		}
 		indexes[row.RowNumber] = len(out.Rows)
+		if row.RowNumber < 0 || row.RowNumber > math.MaxInt32 {
+			rows.Close()
+			return out, fmt.Errorf("statement row number %d out of range", row.RowNumber)
+		}
 		numbers = append(numbers, int32(row.RowNumber))
 		out.Rows = append(out.Rows, row)
 	}

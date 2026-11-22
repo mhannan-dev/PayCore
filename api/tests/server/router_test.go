@@ -137,7 +137,10 @@ func TestUnknownRoutesAndMethodsReturnJSONEnvelope(t *testing.T) {
 	for _, tc := range cases {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
-		var body struct{ Error, Message string }
+		var body struct {
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		}
 		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &body) != nil || body.Error != tc.code || body.Message == "" {
 			t.Errorf("%s %s: got %d %q", tc.method, tc.path, w.Code, w.Body.String())
 		}

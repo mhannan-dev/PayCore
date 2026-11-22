@@ -90,7 +90,7 @@ func (s *Local) Save(reader io.Reader, filename ...string) (key, digest string, 
 	}
 	complete := false
 	defer func() {
-		file.Close()
+		_ = file.Close() // Checked below on success; after a failure the file is removed.
 		if !complete {
 			_ = s.root.Remove(key)
 		}

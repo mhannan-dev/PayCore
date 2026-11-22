@@ -17,6 +17,7 @@ func ReadUpload(w http.ResponseWriter, r *http.Request) (models.AttachmentUpload
 			_ = r.MultipartForm.RemoveAll()
 		}
 	}
+	//nolint:gosec // G120: r.Body is bounded by http.MaxBytesReader at the top of this function.
 	if err := r.ParseMultipartForm(1024 * 1024); err != nil {
 		cleanup()
 		var limit *http.MaxBytesError

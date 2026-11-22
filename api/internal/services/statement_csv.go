@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"sort"
@@ -99,7 +100,10 @@ func parseStatementCSV(ctx context.Context, data []byte, currency models.Currenc
 			row.Errors = append(row.Errors, "direction: use DEBIT or CREDIT")
 		}
 		if len(row.Errors) == 0 {
-			encoded, _ := json.Marshal(e)
+			encoded, marshalErr := json.Marshal(e)
+			if marshalErr != nil {
+				return models.StatementPreview{}, fmt.Errorf("fingerprint statement row: %w", marshalErr)
+			}
 			sum := sha256.Sum256(encoded)
 			hash := hex.EncodeToString(sum[:])
 			if seen[hash] {

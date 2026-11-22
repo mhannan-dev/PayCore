@@ -135,7 +135,9 @@ func (g *testRouter) do(method, path, body, token string) *httptest.ResponseReco
 
 func errorCode(t *testing.T, w *httptest.ResponseRecorder) string {
 	t.Helper()
-	var body struct{ Error string }
+	var body struct {
+		Error string `json:"error"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode %q: %v", w.Body.String(), err)
 	}
@@ -466,8 +468,10 @@ func TestRBACUsersPaging(t *testing.T) {
 		t.Fatalf("query: %+v", q)
 	}
 	var body struct {
-		Items                []models.ManagedUser
-		Limit, Offset, Total int
+		Items  []models.ManagedUser `json:"items"`
+		Limit  int                  `json:"limit"`
+		Offset int                  `json:"offset"`
+		Total  int                  `json:"total"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Total != 2 || body.Limit != 5 || body.Offset != 10 || len(body.Items) != 2 {
 		t.Fatalf("envelope: %+v %v", body, err)

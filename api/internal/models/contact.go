@@ -44,11 +44,11 @@ var (
 
 func trimmedOptional(value *string, max int) (*string, error) {
 	if value == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil means the optional field is absent.
 	}
 	v := strings.TrimSpace(*value)
 	if v == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // blank is stored as absent.
 	}
 	if len([]rune(v)) > max {
 		return nil, errors.New("field is too long")

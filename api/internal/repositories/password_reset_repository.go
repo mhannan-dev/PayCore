@@ -48,7 +48,7 @@ func (r *PasswordResetRepository) IssueResetToken(ctx context.Context, email str
 	if _, err := tx.Exec(ctx, "INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)", tokenHash, u.ID, expires); err != nil {
 		return models.ResetUser{}, err
 	}
-	if err := insertEmail(ctx, tx, models.EmailPasswordReset, models.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
+	if err := insertEmail(ctx, tx, models.EmailPasswordReset, models.EmailRecipient(u), tokenHash, expires, draft...); err != nil {
 		return models.ResetUser{}, err
 	}
 	return u, tx.Commit(ctx)

@@ -126,7 +126,7 @@ func (s *PasswordResetService) draft(token string, expires time.Time) models.Ema
 		return nil
 	}
 	return func(recipient models.EmailRecipient) (models.EmailContent, error) {
-		msg, err := s.message(models.ResetUser{ID: recipient.ID, FirstName: recipient.FirstName, Email: recipient.Email}, token, expires)
+		msg, err := s.message(models.ResetUser(recipient), token, expires)
 		return models.EmailContent{To: msg.To, Subject: msg.Subject, Text: msg.Text, HTML: msg.HTML}, err
 	}
 }

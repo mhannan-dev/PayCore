@@ -128,3 +128,13 @@ Route files may use `internal/http/routing` for declarative route-group registra
 If a rule genuinely cannot be followed, disable the specific rule on the specific line with a reason, e.g.
 `// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- third-party callback is untyped`
 or `//nolint:forcetypeassert // value set two lines above`. File-wide or project-wide disables need a team decision recorded here.
+
+### Recorded project-wide exceptions (api/.golangci.yml)
+
+| Exception | Scope | Reason |
+| --- | --- | --- |
+| `errcheck` ignores `pgx.Tx.Rollback` | all Go code | `defer tx.Rollback(ctx)` after a successful `Commit` always returns `ErrTxClosed`; a failed rollback also breaks the connection, which pgx reports on its own. |
+| `staticcheck` QF1001 (De Morgan) off | all Go code | Rewriting `!(a && b)` character-class checks makes them harder to read. |
+| `noctx`, `errcheck` off | `_test.go` files | `httptest.NewRequest` needs no context, and a deferred `Close` in a test fixture cannot lose production data. |
+
+Deferred `Close` in production code is still checked: on a write path, call `Close` explicitly and check the error before reporting success (see `storage.Local.Save`); a read-only close may be ignored as `defer func() { _ = f.Close() }()` with a comment.

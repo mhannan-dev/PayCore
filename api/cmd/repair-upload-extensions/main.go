@@ -46,7 +46,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }() // Read-only: a close error cannot lose data.
 	rows, err := pool.Query(ctx, `SELECT id, storage_key, file_name, sha256, size_bytes
         FROM attachments WHERE storage_kind='LOCAL' AND length(storage_key)=64`)
 	if err != nil {
@@ -113,14 +113,14 @@ func copyVerified(root *os.Root, file legacyFile, newKey string) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }() // Read-only: a close error cannot lose data.
 	target, err := root.OpenFile(newKey, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if errors.Is(err, os.ErrExist) {
 		existing, openErr := root.Open(newKey)
 		if openErr != nil {
 			return openErr
 		}
-		defer existing.Close()
+		defer func() { _ = existing.Close() }() // Read-only: a close error cannot lose data.
 		return verify(existing, io.Discard, file)
 	}
 	if err != nil {
@@ -128,7 +128,7 @@ func copyVerified(root *os.Root, file legacyFile, newKey string) error {
 	}
 	complete := false
 	defer func() {
-		target.Close()
+		_ = target.Close() // Checked below on success; after a failure the file is removed.
 		if !complete {
 			_ = root.Remove(newKey)
 		}

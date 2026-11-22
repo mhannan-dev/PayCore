@@ -165,7 +165,7 @@ func (s SMTP) session(ctx context.Context, fn func(*smtp.Client) error) error {
 		_ = conn.Close()
 		return fmt.Errorf("smtp greeting: %w", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }() // Delivery outcome is decided by Quit/Data, not by Close.
 	hello := s.HelloName
 	if hello == "" {
 		hello = "localhost"

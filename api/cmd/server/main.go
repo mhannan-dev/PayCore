@@ -80,7 +80,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Upload storage initialization failed. Check UPLOAD_DIR permissions.")
 		}
-		defer files.Close()
+		defer func() { _ = files.Close() }() // Process exit; nothing left to flush.
 		attachments := repositories.NewAttachmentRepository(pool)
 		attachmentService := services.NewAttachmentService(attachments, files, helpers.NewWebPConverter(2))
 		registeredControllers.Attachments = controllers.NewAttachmentController(attachmentService, services.NewPhotoService(attachments, files))

@@ -287,7 +287,7 @@ func writeAnimation(w io.Writer, animation *gif.GIF, attempt int) error {
 		previous := image.NewNRGBA(canvas.Bounds())
 		draw.Draw(previous, previous.Bounds(), canvas, image.Point{}, draw.Src)
 		draw.Draw(canvas, frame.Bounds(), frame, frame.Bounds().Min, draw.Over)
-		snapshot := image.Image(canvas)
+		var snapshot image.Image
 		if attempt > 0 {
 			width, height := scaledImageSize(animation.Config.Width, animation.Config.Height, attempt)
 			snapshot = scaleImage(canvas, width, height)

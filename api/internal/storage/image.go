@@ -19,7 +19,7 @@ func (s *Local) InspectImage(ctx context.Context, key string) (models.ImageInfo,
 	if err != nil {
 		return models.ImageInfo{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }() // Read-only: a close error cannot lose data.
 	cfg, format, err := image.DecodeConfig(file)
 	if err != nil {
 		// An unreadable image header cannot satisfy the profile-photo policy.

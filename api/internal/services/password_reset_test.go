@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func (s *resetStore) IssueResetToken(_ context.Context, email string, digest []b
 		return models.ResetUser{}, repositories.ErrResetThrottled
 	}
 	if len(drafts) > 0 && drafts[0] != nil {
-		content, err := drafts[0](models.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName})
+		content, err := drafts[0](models.EmailRecipient(u))
 		if err != nil {
 			return models.ResetUser{}, err
 		}
@@ -87,13 +88,13 @@ func TestPasswordResetFlow(t *testing.T) {
 	if info, err := svc.Inspect(ctx, token); err != nil || info.Email != "rasel@example.test" {
 		t.Fatalf("inspect: %+v %v", info, err)
 	}
-	if _, err := svc.Confirm(ctx, token, "too-short"); err != ErrWeakPassword {
+	if _, err := svc.Confirm(ctx, token, "too-short"); !errors.Is(err, ErrWeakPassword) {
 		t.Fatalf("weak password: %v", err)
 	}
 	if email, err := svc.Confirm(ctx, token, "Reset#1234"); err != nil || email != "rasel@example.test" || !strings.HasPrefix(store.reset[email], "$2") {
 		t.Fatalf("confirm: %q %v", email, err)
 	}
-	if _, err := svc.Confirm(ctx, token, "Reset#1234"); err != ErrResetToken {
+	if _, err := svc.Confirm(ctx, token, "Reset#1234"); !errors.Is(err, ErrResetToken) {
 		t.Fatalf("reuse must fail: %v", err)
 	}
 }
@@ -116,7 +117,7 @@ func TestPasswordResetDoesNotRevealAccounts(t *testing.T) {
 
 func TestPasswordResetNeedsCaptcha(t *testing.T) {
 	svc, store := newResetService(false)
-	if err := svc.Request(context.Background(), models.PasswordResetRequest{Email: "rasel@example.test"}); err != ErrCaptcha {
+	if err := svc.Request(context.Background(), models.PasswordResetRequest{Email: "rasel@example.test"}); !errors.Is(err, ErrCaptcha) {
 		t.Fatalf("captcha: %v", err)
 	}
 	if store.tokens != nil {

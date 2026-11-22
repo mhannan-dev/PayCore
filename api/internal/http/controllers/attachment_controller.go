@@ -100,7 +100,7 @@ func (h *AttachmentController) Metadata(c *gin.Context) {
 	responses.OK(c, a)
 }
 func serveAttachment(c *gin.Context, result models.AttachmentDownload, inline bool) {
-	defer result.Content.Close()
+	defer func() { _ = result.Content.Close() }() // Read-only: a close error cannot lose data.
 	disposition := "attachment"
 	if inline {
 		disposition = "inline"

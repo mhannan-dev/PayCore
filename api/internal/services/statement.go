@@ -48,7 +48,7 @@ func (s *StatementService) prepare(ctx context.Context, owner string, req models
 	if err != nil {
 		return models.StatementPreview{}, "", err
 	}
-	defer file.Content.Close()
+	defer func() { _ = file.Content.Close() }() // Read-only: a close error cannot lose data.
 	if file.Attachment.OwnerUserID != owner || !strings.EqualFold(filepath.Ext(file.Attachment.FileName), ".csv") || file.Attachment.SizeBytes > models.StatementMaxBytes {
 		return models.StatementPreview{}, "", models.ErrStatementFormat
 	}

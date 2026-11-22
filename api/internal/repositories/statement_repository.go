@@ -28,7 +28,7 @@ func (r *StatementRepository) Duplicate(ctx context.Context, owner, account, has
 	var id string
 	err := r.pool.QueryRow(ctx, `SELECT id FROM statement_imports WHERE owner_user_id=$1 AND account_id=$2 AND content_hash=$3`, owner, account, hash).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // nil means no earlier import of this file (models.StatementPreview.DuplicateImportID).
 	}
 	if err != nil {
 		return nil, err
