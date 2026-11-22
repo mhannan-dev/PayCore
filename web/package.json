@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-docs.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/sync-docs.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -17,7 +19,9 @@
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
     "react-toastify": "11.2.0",
+    "remark-gfm": "4.0.1",
     "viem": "2.58.4",
     "wagmi": "3.7.11",
     "yup": "1.7.1"

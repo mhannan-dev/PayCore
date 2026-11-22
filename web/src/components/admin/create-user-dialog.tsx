@@ -10,7 +10,7 @@ import { validateNewUser, type NewUserErrors, type NewUserValues } from "./new-u
 
 type Props = { roles: RoleDetail[]; onClose: () => void; onCreated: (result: InvitationResult) => void };
 
-const EMPTY: NewUserValues = { firstName: "", lastName: "", email: "", roles: ["OPERATOR"] };
+const EMPTY: NewUserValues = { firstName: "", lastName: "", email: "", roles: ["ACCOUNTANT"] };
 
 // API error codes that belong to one field.
 const FIELD_FOR_CODE: Record<string, keyof NewUserValues> = { email_taken: "email" };

@@ -15,7 +15,7 @@ func NormalizeRoles(values []string) ([]string, error) {
 	for _, value := range values {
 		role := strings.ToUpper(strings.TrimSpace(value))
 		switch role {
-		case "OPERATOR", "ADMIN", "LEAD_OPERATOR", "COMPLIANCE_AUDITOR", "STAFF_ENGINEER":
+		case RoleAccountant, RoleAdmin, RoleComplianceAuditor:
 		default:
 			return nil, errors.New("unsupported role")
 		}

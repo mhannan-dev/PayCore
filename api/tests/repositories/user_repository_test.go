@@ -45,7 +45,7 @@ func TestUserSessionPostgresIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.Create(ctx, "Test operator", nil, email, hash, []string{"OPERATOR", "STAFF_ENGINEER"})
+	u, err := repo.Create(ctx, "Test accountant", nil, email, hash, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,26 +56,31 @@ func TestUserSessionPostgresIntegration(t *testing.T) {
 			t.Error("test user cleanup failed")
 		}
 	}()
-	if _, err = repo.Create(ctx, "Duplicate", nil, email, hash, []string{"OPERATOR", "STAFF_ENGINEER"}); err == nil {
+	if _, err = repo.Create(ctx, "Duplicate", nil, email, hash, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}); err == nil {
 		t.Fatal("duplicate email accepted")
 	}
 	found, err := repo.FindByEmail(ctx, email)
-	if err != nil || found.PasswordHash != hash || (!found.HasRole("OPERATOR") || !found.HasRole("STAFF_ENGINEER") || len(found.Roles) != 2) {
+	if err != nil || found.PasswordHash != hash || (!found.HasRole("ACCOUNTANT") || !found.HasRole("COMPLIANCE_AUDITOR") || len(found.Roles) != 2) {
 		t.Fatal("user lookup failed")
+	}
+	for _, legacy := range []string{"OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		if _, err = repo.Create(ctx, "Legacy", nil, "legacy-"+legacy+"-"+email, hash, []string{legacy}); err == nil {
+			t.Fatalf("legacy role accepted: %s", legacy)
+		}
 	}
 	var firstName string
 	var lastName, photo *string
 	if err = pool.QueryRow(ctx, "SELECT first_name, last_name, photo_attachment_id FROM users WHERE id = $1", u.ID).Scan(&firstName, &lastName, &photo); err != nil {
 		t.Fatal(err)
 	}
-	if firstName != "Test operator" || lastName != nil || photo != nil {
+	if firstName != "Test accountant" || lastName != nil || photo != nil {
 		t.Fatal("optional last_name/photo must default to NULL")
 	}
 	if _, err = pool.Exec(ctx, "UPDATE users SET last_name = 'Example' WHERE id = $1", u.ID); err != nil {
 		t.Fatal(err)
 	}
 	updated, err := repo.FindByEmail(ctx, email)
-	if err != nil || updated.FirstName != "Test operator" || updated.LastName == nil || *updated.LastName != "Example" {
+	if err != nil || updated.FirstName != "Test accountant" || updated.LastName == nil || *updated.LastName != "Example" {
 		t.Fatal("first/last name lookup failed")
 	}
 	if _, err = pool.Exec(ctx, "UPDATE users SET last_name = NULL WHERE id = $1", u.ID); err != nil {
@@ -86,7 +91,7 @@ func TestUserSessionPostgresIntegration(t *testing.T) {
 	if err != nil || renamed.FirstName != "Renamed" || renamed.LastName == nil || *renamed.LastName != "Family" || renamed.Email != email || renamed.PasswordHash != hash {
 		t.Fatal("UpdateName did not return the renamed user:", err)
 	}
-	if renamed, err = repo.UpdateName(ctx, u.ID, "Test operator", nil); err != nil || renamed.LastName != nil {
+	if renamed, err = repo.UpdateName(ctx, u.ID, "Test accountant", nil); err != nil || renamed.LastName != nil {
 		t.Fatal("UpdateName could not clear last_name:", err)
 	}
 	digest := sha256.Sum256(nonce[:])

@@ -37,12 +37,17 @@ func TestRBACPermissions(t *testing.T) {
 }
 
 func TestRBACRoleConstants(t *testing.T) {
-	roles := []string{models.RoleAdmin, models.RoleOperator, models.RoleLeadOperator, models.RoleComplianceAuditor, models.RoleStaffEngineer}
+	roles := []string{models.RoleAdmin, models.RoleAccountant, models.RoleComplianceAuditor}
 	normalized, err := models.NormalizeRoles(roles)
 	if err != nil {
 		t.Fatalf("expected all standard role constants to be valid: %v", err)
 	}
-	if len(normalized) != 5 {
-		t.Fatalf("expected 5 unique normalized roles, got %d", len(normalized))
+	if len(normalized) != 3 {
+		t.Fatalf("expected 3 unique normalized roles, got %d", len(normalized))
+	}
+	for _, legacy := range []string{"OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		if _, err := models.NormalizeRoles([]string{legacy}); err == nil {
+			t.Fatalf("legacy role accepted: %s", legacy)
+		}
 	}
 }

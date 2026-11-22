@@ -103,3 +103,5 @@ The following are **unverified questions**, not claims about QDay support. Do no
 - **Indexing support:** can a lightweight indexer observe mandate-related events without running a full archival node?
 
 Until these are verified, the safe design is application-level authorization in PayCore plus the existing noncustodial ERC-20 transfer flow.
+
+Part D prototypes the on-chain half of this proposal in `contracts/src/QuantumPayments.sol` without changing P0. It implements revocable mandates, per-transaction and daily caps, a merchant allowlist, expiry and owner-approved escalation; the exact rules, security notes and tests are in [CONTRACTS.md](CONTRACTS.md). The API-side mandate, indexing and UI remain unimplemented.

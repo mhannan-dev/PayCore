@@ -76,7 +76,7 @@ func TestMFAPausePreservesEnrollmentAndReenablingRejectsPasswordSession(t *testi
 	if err = pool.QueryRow(ctx, `SELECT encrypted_secret,last_counter,(SELECT count(*) FROM mfa_recovery_codes WHERE user_id=$1) FROM user_mfa WHERE user_id=$1`, user.ID).Scan(&secret, &counter, &codes); err != nil || string(secret) != "retained encrypted secret" || counter != 123 || codes != 1 {
 		t.Fatal("pause modified enrollment or recovery state")
 	}
-	if _, err = pool.Exec(ctx, `UPDATE users SET roles=ARRAY['OPERATOR']::text[] WHERE id=$1`, user.ID); err != nil {
+	if _, err = pool.Exec(ctx, `UPDATE users SET roles=ARRAY['ACCOUNTANT']::text[] WHERE id=$1`, user.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = enforced.FindSession(ctx, digest[:]); !errors.Is(err, pgx.ErrNoRows) {

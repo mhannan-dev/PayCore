@@ -60,7 +60,7 @@ Repository, controller and seeder integration suites use isolated schemas and cl
 
 ## Concurrency load tests
 
-The k6 suite drives concurrent idempotent JPY transfers against a running API and verifies the ledger invariant before and after the run. It is opt-in and is not part of `.\test.ps1`. It uses a seeded non-admin operator for transfers and a separate auditor for the zero-sum report, so the admin MFA flow is not involved. Each VU submits a transfer twice with the same `Idempotency-Key` and checks that both responses return the same journal ID; counters track duplicate postings, overdrafts, `ledger_busy` responses, replay matches and invariant failures.
+The k6 suite drives concurrent idempotent JPY transfers against a running API and verifies the ledger invariant before and after the run. It is opt-in and is not part of `.\test.ps1`. It uses a seeded accountant for transfers and a separate auditor for the zero-sum report, so the admin MFA flow is not involved. Each VU submits a transfer twice with the same `Idempotency-Key` and checks that both responses return the same journal ID; counters track duplicate postings, overdrafts, `ledger_busy` responses, replay matches and invariant failures.
 
 Start the API with seeded users and ledger accounts, then run:
 

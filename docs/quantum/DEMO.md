@@ -5,14 +5,14 @@ This is a **testnet-only** walkthrough. tUSD8 has no real value; never use a mai
 ## Preconditions (do these before the clock starts)
 
 - PayCore API, web and PostgreSQL are running; `QUANTUM_ENABLED=true` and the chain worker is healthy.
-- The seeded operator has `quantum:read` and `quantum:write`; `/quantum` is visible in the sidebar.
+- The seeded admin has `quantum:read` and `quantum:write`; `/quantum` is visible in the sidebar.
 - A browser wallet has QDay Aevum testnet gas and tUSD8. Fund it through the [official QDay faucet](https://wiki.qday.info/guide/start/faucet) only.
 - Use two browser profiles or windows: one signed in as the merchant, one signed out for the customer checkout.
 - Do not put the checkout token in chat, screenshots or analytics; it is a payment capability.
 
 ## Beat 1 — Merchant login (20 s)
 
-1. Open `http://localhost:3000` in the operator profile and sign in.
+1. Open `http://localhost:3000` in the admin profile and sign in.
 2. Point to **Quantum Payments** in the sidebar and open `/quantum`.
 3. Say: *"This is a normal PayCore session: RBAC gates the page, and the API contract is mirrored by hand in the web client."*
 

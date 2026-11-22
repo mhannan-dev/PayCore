@@ -60,8 +60,8 @@ All URLs start with `/api/v1` and require a bearer session:
 | GET `/reconciliation/imports` | `reconciliation:read`, `ledger:read` | `limit` 1–100 (default 20), `offset` |
 | GET `/reconciliation/imports/:id` | Same as list | `limit` 1–100 (default 50), `offset` for rows |
 
-ADMIN, OPERATOR and LEAD_OPERATOR receive import/read permissions. The
-COMPLIANCE_AUDITOR receives read permission. STAFF_ENGINEER receives neither.
+ADMIN and ACCOUNTANT receive import/read permissions; ADMIN also covers the
+former LEAD_OPERATOR grant. The COMPLIANCE_AUDITOR receives read permission.
 The web form also requires attachment upload/read and ledger read permissions.
 List returns an array; detail includes import metadata and the requested rows.
 Duplicate imports return HTTP 409; refreshing preview provides the existing
@@ -79,7 +79,8 @@ Migration `020_statement_matching.sql` adds matching, rejected-candidate and
 review-note tables. Matching is one statement row to one existing ledger posting.
 It never creates transfers, reversals, adjustment postings or balance changes.
 Matching applies to the uploader's own imports; the ADMIN role does not bypass
-ownership. ADMIN, OPERATOR and LEAD_OPERATOR receive `reconciliation:match`;
+ownership. ADMIN and ACCOUNTANT receive `reconciliation:match`, with ADMIN covering
+the former LEAD_OPERATOR grant;
 COMPLIANCE_AUDITOR can view their own imported statements and reviews only.
 
 Choose the direction mapping explicitly for each import:

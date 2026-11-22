@@ -29,10 +29,9 @@ type UserResult struct {
 func SampleUsers() []UserSeed {
 	last := func(value string) *string { return &value }
 	return []UserSeed{
-		{FirstName: "Admin", LastName: last("Admin"), Email: "admin@yopmail.com", Roles: []string{"ADMIN", "OPERATOR"}},
-		{FirstName: "Operator", LastName: nil, Email: "operator@yopmail.com", Roles: []string{"OPERATOR"}},
+		{FirstName: "Admin", LastName: last("Admin"), Email: "admin@yopmail.com", Roles: []string{"ADMIN", "ACCOUNTANT"}},
+		{FirstName: "Accountant", LastName: nil, Email: "accountant@yopmail.com", Roles: []string{"ACCOUNTANT"}},
 		{FirstName: "Auditor", LastName: last("Auditor"), Email: "auditor@yopmail.com", Roles: []string{"COMPLIANCE_AUDITOR"}},
-		{FirstName: "Engineer", LastName: last("Engineer"), Email: "engineer@yopmail.com", Roles: []string{"STAFF_ENGINEER"}},
 	}
 }
 

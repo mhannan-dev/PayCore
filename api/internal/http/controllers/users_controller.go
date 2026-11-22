@@ -117,7 +117,7 @@ func (h *UsersController) List(c *gin.Context) {
 	role := strings.ToUpper(strings.TrimSpace(c.Query("role")))
 	if role != "" {
 		if _, err := models.NormalizeRoles([]string{role}); err != nil {
-			fail(c, apperr.BadRequest("invalid_role", "role must be one of ADMIN, OPERATOR, LEAD_OPERATOR, COMPLIANCE_AUDITOR and STAFF_ENGINEER."))
+			fail(c, apperr.BadRequest("invalid_role", "role must be one of ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR."))
 			return
 		}
 	}

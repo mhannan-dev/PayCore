@@ -16,7 +16,7 @@
 
 </div>
 
-PayCore is a learning-grade but production-minded fintech core: an append-only double-entry ledger with strict idempotency and deterministic locking, plus the identity, access control and operator tooling around it. Money is always an integer in minor units, every rule that matters is enforced by the database, and both codebases are held to [strict type-safety and layered-architecture rules](docs/coding_rules.md).
+PayCore is a learning-grade but production-minded fintech core: an append-only double-entry ledger with strict idempotency and deterministic locking, plus the identity, access control and administrator tooling around it. Money is always an integer in minor units, every rule that matters is enforced by the database, and both codebases are held to [strict type-safety and layered-architecture rules](docs/coding_rules.md).
 
 ![PayCore operations console: overview](docs/previews/web-overview.png)
 
@@ -45,7 +45,7 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 **Implemented**
 
 - **Email and password sign-in** with a server-generated math CAPTCHA, bcrypt hashing, and revocable bearer sessions (only token hashes are stored).
-- **Role-based access control:** 5 roles and 13 fine-grained permissions, enforced by the API on every request and reflected in the UI (navigation, page guards, controls).
+- **Role-based access control:** 3 roles and 24 fine-grained permissions, enforced by the API on every request and reflected in the UI (navigation, page guards, controls).
 - **User management:** paginated, searchable user list; invite users by email; edit roles; deactivate, reactivate or delete users, with "last administrator" and "not yourself" safeguards.
 - **Audit log:** append-only record of sign-ins and account administration (actor, target, before/after roles, IP); the database refuses edits and deletes, and admin changes are recorded in the same transaction.
 - **Email invitations and forgot password:** single-use, hashed, expiring links; background delivery with retries and a per-invitation delivery record; enumeration-safe reset requests.
@@ -97,6 +97,8 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 
 ## Getting started
 
+প্রথমবার ব্যবহার করলে [ধাপে ধাপে বাংলা setup ও ব্যবহারবিধি](docs/user_guide.md#শুরু-করুন-এখান-থেকে) অনুসরণ করুন: প্রতিটি ধাপের prerequisite, সফলতার প্রমাণ ও পরের কাজ দেওয়া আছে। Data কোথায় যায় বুঝতে দেখুন [ERD ও app workflow](docs/erd.md#app-ব্যবহার-করতে-কোনটার-পরে-কী)।
+
 ### Prerequisites
 
 - [Go](https://go.dev/dl/) 1.27 or later
@@ -110,15 +112,36 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 git clone https://github.com/<your-account>/paycore.git
 cd paycore
 
-# 1. Configure (copy the examples; the defaults work for local development)
-Copy-Item api/.env.example api/.env
-Copy-Item web/.env.example web/.env.local
+# 1. Create missing local configuration; preserve existing files
+if (-not (Test-Path api/.env)) { Copy-Item api/.env.example api/.env }
+if (-not (Test-Path web/.env.local)) { Copy-Item web/.env.example web/.env.local }
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
-# 2. Start everything: PostgreSQL, Mailpit, the API (with hot reload) and the web console
+# 2. Provision the persistent MFA encryption key
+Push-Location api
+go run ./cmd/mfa-key
+Pop-Location
+```
+
+Before continuing, open `api/.env` in your editor and copy its `MFA_ENCRYPTION_KEY` value into the same setting in the root `.env`. Preserve an existing key. Compose requires this value even when starting only PostgreSQL/Mailpit. Both real files are git-ignored; do not share or commit their contents.
+
+```powershell
+# 3. Start infrastructure from the project root
+docker compose up -d --wait postgres mailpit
+
+# 4. First-time demo data: users, then the JPY ledger
+Push-Location api
+go run ./cmd/seed-users
+go run ./cmd/seed-ledger
+Pop-Location
+
+# 5. Start API and web; keep this terminal open
 .\run.ps1
 ```
 
-`run.ps1` starts the Docker services, picks free ports (the API defaults to 8080, the web to 3000), passes the right API URL to the web app, and stops both servers on Ctrl+C. Run `.\run.ps1 -ListRoutes` to print every API endpoint and web page without starting anything.
+Open the web URL printed by the launcher, sign in as `admin@yopmail.com` with the password entered during seeding, finish MFA when enabled, and select **JPY** to see the sample accounts. Continue with the [transfer walkthrough](docs/user_guide.md#ledger-transfer-এর-ক্রম), or choose the separate [Quantum workflow](docs/user_guide.md#quantum-merchant-এর-ক্রম).
+
+`run.ps1` picks free ports (the API defaults to 8080, the web to 3000), passes the right API URL to the web app, and stops both servers on Ctrl+C. Automatic database startup is skipped when `DATABASE_URL` is already configured, including in `api/.env`; start the configured database first as above. Run `.\run.ps1 -ListRoutes` to print every API endpoint and web page without starting anything.
 
 ### Manual setup (any OS)
 
@@ -154,7 +177,7 @@ Open http://localhost:3000; the API is available at http://localhost:8080. Uploa
 
 ### Create users
 
-Seed the four development accounts (admin, operator, auditor, engineer). The command prompts for a password and never prints it:
+Seed the three development accounts (admin, accountant, auditor). The command prompts for a password and never prints it:
 
 ```powershell
 cd api
@@ -209,7 +232,7 @@ Check the email settings without starting the API: `cd api; go run ./cmd/mail-ch
 | Variable | Used by |
 | --- | --- |
 | `PAYCORE_SEED_PASSWORD` | `seed-users`, to avoid the interactive prompt in scripts |
-| `PAYCORE_LOAD_PASSWORD` | `api/load/run-load-test.ps1`, to supply the seeded operator/auditor password |
+| `PAYCORE_LOAD_PASSWORD` | `api/load/run-load-test.ps1`, to supply the seeded demo account password |
 | `K6_IMAGE` | `api/load/run-load-test.ps1`, to override the Docker k6 image when a local k6 binary is unavailable |
 | `PAYCORE_API_URL` | `run.ps1`, to point the web app at a different API |
 | `DATABASE_TEST_URL` | Go integration tests (PostgreSQL); skipped when unset |
@@ -237,7 +260,7 @@ curl -s http://localhost:8080/api/v1/users?limit=20 -H 'Authorization: Bearer <t
 # 4. Invite a user (requires users:write); they receive a set-password email
 curl -s -X POST http://localhost:8080/api/v1/users -H 'Authorization: Bearer <token>' \
   -H 'Content-Type: application/json' \
-  -d '{"first_name":"Mina","email":"mina@example.com","roles":["OPERATOR"]}'
+  -d '{"first_name":"Mina","email":"mina@example.com","roles":["ACCOUNTANT"]}'
 ```
 
 Full endpoint references: [authentication](docs/email_login.md), [RBAC, users, invitations and password reset](docs/rbac.md), [attachments](docs/attachments.md).
@@ -310,9 +333,11 @@ All changes follow the [coding rules](docs/coding_rules.md): type safety, thin c
 
 | Topic | Document |
 | --- | --- |
+| **User guide: who, why and how** | [docs/user_guide.md](docs/user_guide.md) |
 | Product specification and roadmap | [ProjectFeature.md](ProjectFeature.md) |
 | Coding rules (type safety) | [docs/coding_rules.md](docs/coding_rules.md) |
 | Database setup | [docs/database_setup.md](docs/database_setup.md) |
+| Database ERD (all tables and relationships) | [docs/erd.md](docs/erd.md) |
 | Ledger core (accounts, transfers, reversals, idempotency) | [docs/ledger.md](docs/ledger.md) |
 | Authentication | [docs/email_login.md](docs/email_login.md) |
 | RBAC, users, invitations, password reset, email | [docs/rbac.md](docs/rbac.md) |

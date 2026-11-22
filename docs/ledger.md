@@ -67,7 +67,7 @@ Idempotency-Key: 3f1c2a9e-6f0b-4b8e-9b51-2d0f6c1e7a10
 
 Errors: `400 invalid_transfer` / `unbalanced_transfer` / `idempotency_key_required`, `404 account_not_found` / `transfer_not_found`, `409 already_reversed` / `cannot_reverse_reversal` / `idempotency_in_flight`, `422 insufficient_funds` (with `details.account_number`, `balance`, `change`) / `account_inactive` / `currency_mismatch` / `idempotency_key_reused`, `503 ledger_busy` (`Retry-After`).
 
-`accounts:write` (migration 014) is granted to Admin and Lead operator.
+`accounts:write` (migration 014) is granted to Admin; migration 026 folded the former Lead operator grant into Admin.
 
 ## Zero-sum audit
 

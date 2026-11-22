@@ -30,7 +30,7 @@ func (s *securityTransportStub) Overview(ctx context.Context, owner, token strin
 }
 func TestSecurityRoutesRequireOnlyTheirOwnSession(t *testing.T) {
 	stub := &securityTransportStub{}
-	identity := &policyIdentity{user: models.UserDTO{ID: memberID, Roles: []string{models.RoleOperator}}}
+	identity := &policyIdentity{user: models.UserDTO{ID: memberID, Roles: []string{models.RoleAccountant}}}
 	router := server.New(nil, server.Controllers{Security: controllers.NewSecurityController(stub), AuthMiddleware: middleware.NewAuth(identity)})
 	for _, route := range []struct{ method, path string }{
 		{"GET", "/api/v1/auth/security"}, {"POST", "/api/v1/auth/security/recovery-codes"},

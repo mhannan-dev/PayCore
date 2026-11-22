@@ -74,7 +74,7 @@ func TestAttachmentsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := users.Create(ctx, "Owner", nil, "owner@example.test", hash, []string{"OPERATOR"})
+	owner, err := users.Create(ctx, "Owner", nil, "owner@example.test", hash, []string{"ACCOUNTANT"})
 	if err != nil {
 		t.Fatal(err)
 	}

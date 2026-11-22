@@ -145,10 +145,10 @@ Core reserve/capture/release তৈরি হওয়ার আগে payout চ�
 
 - [ ] নির্বাচিত external OIDC provider দিয়ে authentication integration।
 - [ ] প্রতিটি business endpoint-এ resource/account-level authorization।
-- [x] Audit, outbox metrics, replay ও operator action-এর restricted permissions।
+- [x] Audit, outbox metrics, replay ও administrator action-এর restricted permissions।
 - [ ] Service-to-service token-এর audience ও permission validation।
 - [ ] Sensitive information বাদ দিয়ে minimal event payload ও নিরাপদ logging।
-- [ ] প্রয়োজনীয় security/operator action-এর durable audit record।
+- [ ] প্রয়োজনীয় security/administrator action-এর durable audit record।
 
 Custom Auth service বর্তমান চার-service roadmap-এর বাধ্যতামূলক অংশ নয়।
 

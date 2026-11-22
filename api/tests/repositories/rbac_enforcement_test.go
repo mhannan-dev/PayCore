@@ -28,7 +28,7 @@ func TestRBACRevocationAndRoleChangesAffectExistingSession(t *testing.T) {
 	if _, err := users.Create(ctx, "Admin", nil, "policy-admin@example.test", "fixture hash", []string{models.RoleAdmin}); err != nil {
 		t.Fatal(err)
 	}
-	u, err := users.Create(ctx, "Authorization", nil, "authorization@example.test", "fixture hash", []string{models.RoleOperator})
+	u, err := users.Create(ctx, "Authorization", nil, "authorization@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,11 +57,11 @@ func TestRBACRevocationAndRoleChangesAffectExistingSession(t *testing.T) {
 		}
 	}
 	check(204)
-	if _, err = pool.Exec(ctx, `DELETE FROM role_permissions WHERE role_id=(SELECT id FROM roles WHERE code='OPERATOR') AND permission_id=(SELECT id FROM permissions WHERE code='attachments:read')`); err != nil {
+	if _, err = pool.Exec(ctx, `DELETE FROM role_permissions WHERE role_id=(SELECT id FROM roles WHERE code='ACCOUNTANT') AND permission_id=(SELECT id FROM permissions WHERE code='attachments:read')`); err != nil {
 		t.Fatal(err)
 	}
 	check(403) // Same session; no re-login or cached grant.
-	if _, err = rbac.SetUserRoles(ctx, u.ID, []string{models.RoleOperator, models.RoleComplianceAuditor}); err != nil {
+	if _, err = rbac.SetUserRoles(ctx, u.ID, []string{models.RoleAccountant, models.RoleComplianceAuditor}); err != nil {
 		t.Fatal(err)
 	}
 	check(204) // Grants are the union of the current roles.
@@ -103,7 +103,7 @@ func TestRBACPermissionSourcesAndDefaultMatrix(t *testing.T) {
 			t.Fatalf("migration/seeder policy drift for %s: actual=%v expected=%v", role, actual, want)
 		}
 	}
-	u, err := repositories.NewUserRepository(pool).Create(ctx, "Source", nil, "source@example.test", "fixture hash", []string{models.RoleOperator})
+	u, err := repositories.NewUserRepository(pool).Create(ctx, "Source", nil, "source@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRBACPermissionSourcesAndDefaultMatrix(t *testing.T) {
 		t.Fatalf("legacy mirror changed effective permissions: %v", grants)
 	}
 	roles, err := rbac.FindRolesByUserID(ctx, u.ID)
-	if err != nil || len(roles) != 1 || roles[0].Code != models.RoleOperator {
+	if err != nil || len(roles) != 1 || roles[0].Code != models.RoleAccountant {
 		t.Fatalf("legacy mirror changed effective roles: %v %v", roles, err)
 	}
 	for _, definition := range seeders.DefaultPermissions() {

@@ -108,19 +108,19 @@ func TestLoginAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &fakeUsers{user: models.User{ID: "user-1", FirstName: "Test operator", Email: "operator@example.test", PasswordHash: hash, Roles: []string{"OPERATOR", "STAFF_ENGINEER"}, IsActive: true}}
+	store := &fakeUsers{user: models.User{ID: "user-1", FirstName: "Test accountant", Email: "accountant@example.test", PasswordHash: hash, Roles: []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}, IsActive: true}}
 	captcha := &fakeCaptcha{}
 	s, err := NewAuthService(store, captcha)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := models.LoginRequest{Email: "OPERATOR@example.test", Password: "Exampl#e01"}
+	req := models.LoginRequest{Email: "ACCOUNTANT@example.test", Password: "Exampl#e01"}
 	if _, err = s.Login(context.Background(), req); !errors.Is(err, ErrCaptcha) || store.lookups != 0 {
 		t.Fatal("CAPTCHA must be verified before user lookup")
 	}
 	captcha.valid = true
 	response, err := s.Login(context.Background(), req)
-	if err != nil || len(response.Token) != 64 || (len(response.User.Roles) != 2 || response.User.Roles[0] != "OPERATOR" || response.User.Roles[1] != "STAFF_ENGINEER") {
+	if err != nil || len(response.Token) != 64 || (len(response.User.Roles) != 2 || response.User.Roles[0] != "ACCOUNTANT" || response.User.Roles[1] != "COMPLIANCE_AUDITOR") {
 		t.Fatal("valid login failed")
 	}
 	digest := sha256.Sum256([]byte(response.Token))
@@ -164,12 +164,12 @@ func TestUpdateProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &fakeUsers{user: models.User{ID: "user-1", FirstName: "Old", Email: "operator@example.test", PasswordHash: hash, Roles: []string{"OPERATOR"}, IsActive: true}}
+	store := &fakeUsers{user: models.User{ID: "user-1", FirstName: "Old", Email: "accountant@example.test", PasswordHash: hash, Roles: []string{"ACCOUNTANT"}, IsActive: true}}
 	s, err := NewAuthService(store, &fakeCaptcha{valid: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	login, err := s.Login(context.Background(), models.LoginRequest{Email: "operator@example.test", Password: "Exampl#e01"})
+	login, err := s.Login(context.Background(), models.LoginRequest{Email: "accountant@example.test", Password: "Exampl#e01"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestUpdateProfile(t *testing.T) {
 		t.Fatal("unknown session must be rejected before validation")
 	}
 	u, err := s.UpdateProfile(context.Background(), login.Token, models.UpdateProfileRequest{FirstName: " Kenji ", LastName: &last})
-	if err != nil || u.FirstName != "Kenji" || u.LastName == nil || *u.LastName != "Sato" || u.Email != "operator@example.test" {
+	if err != nil || u.FirstName != "Kenji" || u.LastName == nil || *u.LastName != "Sato" || u.Email != "accountant@example.test" {
 		t.Fatalf("update failed: %+v %v", u, err)
 	}
 	blank := "   "
@@ -195,7 +195,7 @@ func TestUpdateProfile(t *testing.T) {
 // An invited user (no password yet) cannot log in with any password, including the
 // internal dummy one, and the attempt is answered like any wrong password.
 func TestLoginRejectsInvitedUserWithoutPassword(t *testing.T) {
-	store := &fakeUsers{user: models.User{ID: "user-2", FirstName: "Invited", Email: "invited@example.test", Roles: []string{"OPERATOR"}, IsActive: true}}
+	store := &fakeUsers{user: models.User{ID: "user-2", FirstName: "Invited", Email: "invited@example.test", Roles: []string{"ACCOUNTANT"}, IsActive: true}}
 	captcha := &fakeCaptcha{}
 	auth, err := NewAuthService(store, captcha)
 	if err != nil {
@@ -245,7 +245,7 @@ func TestLoginAudit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &fakeUsers{user: models.User{ID: "user-9", FirstName: "A", Email: "a@example.test", PasswordHash: hash, Roles: []string{"OPERATOR"}, IsActive: true}}
+	store := &fakeUsers{user: models.User{ID: "user-9", FirstName: "A", Email: "a@example.test", PasswordHash: hash, Roles: []string{"ACCOUNTANT"}, IsActive: true}}
 	captcha := &fakeCaptcha{}
 	auth, err := NewAuthService(store, captcha)
 	if err != nil {

@@ -25,8 +25,8 @@ func main() {
 	firstNameFlag := flag.String("first-name", "", "Required first name")
 	lastNameFlag := flag.String("last-name", "", "Optional last name; omitted means NULL")
 	var rolesInput string
-	flag.StringVar(&rolesInput, "roles", "OPERATOR", "Comma-separated roles, e.g. ADMIN,OPERATOR")
-	flag.StringVar(&rolesInput, "role", "OPERATOR", "Alias for -roles")
+	flag.StringVar(&rolesInput, "roles", "ACCOUNTANT", "Comma-separated roles, e.g. ADMIN,ACCOUNTANT")
+	flag.StringVar(&rolesInput, "role", "ACCOUNTANT", "Alias for -roles")
 	flag.Parse()
 	email, firstName := strings.ToLower(strings.TrimSpace(*emailFlag)), strings.TrimSpace(*firstNameFlag)
 	lastNameValue := strings.TrimSpace(*lastNameFlag)

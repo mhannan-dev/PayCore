@@ -56,7 +56,7 @@ func TestUsersIntegration(t *testing.T) {
 	}
 	password := "Seeder-integration-test-password"
 	results, err := seeders.Users(ctx, pool, password)
-	if err != nil || len(results) != 4 {
+	if err != nil || len(results) != 3 {
 		t.Fatal("initial seeding failed")
 	}
 	for i, result := range results {
@@ -71,27 +71,27 @@ func TestUsersIntegration(t *testing.T) {
 			t.Fatal("seeder result has incorrect last_name")
 		}
 	}
-	var firstHash, operatorHash string
+	var firstHash, accountantHash string
 	var nullableLast, nullablePhoto *string
 	fixtures := seeders.SampleUsers()
-	adminEmail, operatorEmail := fixtures[0].Email, fixtures[1].Email
+	adminEmail, accountantEmail := fixtures[0].Email, fixtures[1].Email
 	var adminRoles []string
 	if err = pool.QueryRow(ctx, "SELECT password_hash, roles FROM users WHERE email = $1", adminEmail).Scan(&firstHash, &adminRoles); err != nil {
 		t.Fatal(err)
 	}
-	if len(adminRoles) != 2 || adminRoles[0] != "ADMIN" || adminRoles[1] != "OPERATOR" {
+	if len(adminRoles) != 2 || adminRoles[0] != "ADMIN" || adminRoles[1] != "ACCOUNTANT" {
 		t.Fatal("multi-role admin seed failed")
 	}
 	if err = bcrypt.CompareHashAndPassword([]byte(firstHash), []byte(password)); err != nil {
 		t.Fatal("seed password is not correctly hashed")
 	}
-	if err = pool.QueryRow(ctx, "SELECT password_hash, last_name, photo_attachment_id FROM users WHERE email = $1", operatorEmail).Scan(&operatorHash, &nullableLast, &nullablePhoto); err != nil {
+	if err = pool.QueryRow(ctx, "SELECT password_hash, last_name, photo_attachment_id FROM users WHERE email = $1", accountantEmail).Scan(&accountantHash, &nullableLast, &nullablePhoto); err != nil {
 		t.Fatal(err)
 	}
-	if firstHash == operatorHash || nullableLast != nil || nullablePhoto != nil {
+	if firstHash == accountantHash || nullableLast != nil || nullablePhoto != nil {
 		t.Fatal("unique password salts or nullable profile fields failed")
 	}
-	if _, err = pool.Exec(ctx, "UPDATE users SET first_name = 'Edited', roles = ARRAY['OPERATOR'], is_active = FALSE WHERE email = $1", adminEmail); err != nil {
+	if _, err = pool.Exec(ctx, "UPDATE users SET first_name = 'Edited', roles = ARRAY['ACCOUNTANT'], is_active = FALSE WHERE email = $1", adminEmail); err != nil {
 		t.Fatal(err)
 	}
 	results, err = seeders.Users(ctx, pool, "Different-password-on-rerun")
@@ -102,7 +102,7 @@ func TestUsersIntegration(t *testing.T) {
 		if result.Inserted {
 			t.Fatal("rerun created duplicate user")
 		}
-		if result.Email == adminEmail && (result.FirstName != "Edited" || len(result.Roles) != 1 || result.Roles[0] != "OPERATOR") {
+		if result.Email == adminEmail && (result.FirstName != "Edited" || len(result.Roles) != 1 || result.Roles[0] != "ACCOUNTANT") {
 			t.Fatal("skipped result must show existing profile and roles")
 		}
 	}
@@ -112,11 +112,11 @@ func TestUsersIntegration(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT first_name, roles, is_active, password_hash FROM users WHERE email = $1", adminEmail).Scan(&firstName, &roles, &active, &unchangedHash); err != nil {
 		t.Fatal(err)
 	}
-	if firstName != "Edited" || len(roles) != 1 || roles[0] != "OPERATOR" || active || unchangedHash != firstHash {
+	if firstName != "Edited" || len(roles) != 1 || roles[0] != "ACCOUNTANT" || active || unchangedHash != firstHash {
 		t.Fatal("rerun changed existing user data")
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO users (first_name, email, password_hash, roles, is_active)
-        VALUES ('Unrelated', 'unrelated@example.test', $1, ARRAY['OPERATOR'], FALSE)`, firstHash); err != nil {
+        VALUES ('Unrelated', 'unrelated@example.test', $1, ARRAY['ACCOUNTANT'], FALSE)`, firstHash); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO auth_sessions (user_id, token_hash, expires_at)
@@ -152,7 +152,7 @@ func TestUsersIntegration(t *testing.T) {
 	}
 	// Explicit administrator promotion preserves credentials and existing roles.
 	var beforeGrantHash string
-	if err = pool.QueryRow(ctx, "SELECT password_hash FROM users WHERE email=$1", operatorEmail).Scan(&beforeGrantHash); err != nil {
+	if err = pool.QueryRow(ctx, "SELECT password_hash FROM users WHERE email=$1", accountantEmail).Scan(&beforeGrantHash); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, "INSERT INTO permissions(code,name) VALUES ('custom:manage','Custom permission')"); err != nil {
@@ -162,21 +162,21 @@ func TestUsersIntegration(t *testing.T) {
 		t.Fatal("missing user promotion must fail")
 	}
 	for i := 0; i < 2; i++ {
-		if err = seeders.GrantSystemAdmin(ctx, pool, operatorEmail); err != nil {
+		if err = seeders.GrantSystemAdmin(ctx, pool, accountantEmail); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var promotedRoles []string
-	if err = pool.QueryRow(ctx, "SELECT password_hash, roles FROM users WHERE email=$1", operatorEmail).Scan(&unchangedHash, &promotedRoles); err != nil {
+	if err = pool.QueryRow(ctx, "SELECT password_hash, roles FROM users WHERE email=$1", accountantEmail).Scan(&unchangedHash, &promotedRoles); err != nil {
 		t.Fatal(err)
 	}
-	if unchangedHash != beforeGrantHash || len(promotedRoles) != 2 || promotedRoles[0] != "OPERATOR" || promotedRoles[1] != "ADMIN" {
+	if unchangedHash != beforeGrantHash || len(promotedRoles) != 2 || promotedRoles[0] != "ACCOUNTANT" || promotedRoles[1] != "ADMIN" {
 		t.Fatal("promotion changed password, removed roles or duplicated ADMIN")
 	}
 	var missingPermissions int
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM permissions p WHERE NOT EXISTS (
         SELECT 1 FROM role_permissions rp JOIN user_roles ur ON ur.role_id=rp.role_id
-        JOIN users u ON u.id=ur.user_id WHERE u.email=$1 AND rp.permission_id=p.id)`, operatorEmail).Scan(&missingPermissions); err != nil || missingPermissions != 0 {
+        JOIN users u ON u.id=ur.user_id WHERE u.email=$1 AND rp.permission_id=p.id)`, accountantEmail).Scan(&missingPermissions); err != nil || missingPermissions != 0 {
 		t.Fatal("system administrator is missing permissions")
 	}
 	// New permissions are included when RBAC is seeded again.
@@ -190,8 +190,16 @@ func TestUsersIntegration(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM role_permissions rp JOIN roles r ON r.id=rp.role_id JOIN permissions p ON p.id=rp.permission_id WHERE r.code='ADMIN' AND p.code='custom:new')`).Scan(&granted); err != nil || !granted {
 		t.Fatal("RBAC seeding did not grant custom permission to ADMIN")
 	}
-	// Force the fourth insert to fail and confirm the earlier three roll back.
-	if _, err = pool.Exec(ctx, "DELETE FROM users; ALTER TABLE users ADD CONSTRAINT test_reject_engineer CHECK (NOT ('STAFF_ENGINEER' = ANY(roles)))"); err != nil {
+	// Legacy role codes are no longer accepted, alone or alongside a valid role.
+	for _, legacy := range []string{"OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		for _, candidate := range []string{"ARRAY[$1]::TEXT[]", "ARRAY['ADMIN',$1]::TEXT[]"} {
+			if _, err = pool.Exec(ctx, "UPDATE users SET roles = "+candidate+" WHERE email = $2", legacy, accountantEmail); err == nil {
+				t.Fatalf("legacy role accepted: %s", legacy)
+			}
+		}
+	}
+	// Force the last insert to fail and confirm the earlier two roll back.
+	if _, err = pool.Exec(ctx, "DELETE FROM users; ALTER TABLE users ADD CONSTRAINT test_reject_auditor CHECK (NOT ('COMPLIANCE_AUDITOR' = ANY(roles)))"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = seeders.Users(ctx, pool, password); err == nil {

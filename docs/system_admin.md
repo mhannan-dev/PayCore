@@ -1,7 +1,7 @@
 # System administrator
 
 `ADMIN` is the System Administrator role. The development fixture
-`admin@yopmail.com` has `ADMIN` and `OPERATOR` roles.
+`admin@yopmail.com` has `ADMIN` and `ACCOUNTANT` roles.
 
 To explicitly grant an existing account administrator access, run from `api`:
 

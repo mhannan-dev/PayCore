@@ -19,8 +19,8 @@ interface FileUploaderProps {
 export function ModernFileUploader({
   onFileAccepted,
   onFileRemoved,
-  label = "Operator Identity & Credentials",
-  description = "Upload profile photo, signing key, or FSA operator clearance certificate.",
+  label = "Identity & Credentials",
+  description = "Upload profile photo, signing key, or FSA administrator clearance certificate.",
   acceptedTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf", ".pem", ".pub"],
   maxSizeMB = 5,
 }: FileUploaderProps) {

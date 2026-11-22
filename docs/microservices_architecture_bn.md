@@ -11,7 +11,7 @@ PayCore-এর লক্ষ্য হলো **চারটি business microserv
 | **Notification** (`services/notification/`) | Transfer/settlement notification, email/webhook delivery, delivery retry | Preferences, subscriptions, templates, delivery attempts, event inbox/outbox | দ্বিতীয় ধাপ; events consume করবে, external provider-এ delivery করবে |
 | **Settlement** (`services/settlement/`) | Bank/provider payout workflow, settlement batch, callback processing, statement reconciliation | Payout requests, workflow state, provider references, reconciliation results, inbox/outbox | তৃতীয় ধাপ; sandbox adapter দিয়ে শুরু, Core-এ authenticated idempotent command পাঠাবে |
 
-Reporting-এর event timeline একটি derived view। মূল journal ও posting-ই authoritative financial record। Login, account-status change বা operator action-এর security audit প্রয়োজন হলে সংশ্লিষ্ট owner service নিজস্ব durable audit/outbox record লিখবে; শুধু financial event timeline দিয়ে সেই audit সম্পূর্ণ হবে না।
+Reporting-এর event timeline একটি derived view। মূল journal ও posting-ই authoritative financial record। Login, account-status change বা administrator action-এর security audit প্রয়োজন হলে সংশ্লিষ্ট owner service নিজস্ব durable audit/outbox record লিখবে; শুধু financial event timeline দিয়ে সেই audit সম্পূর্ণ হবে না।
 
 ## ২. যে অংশগুলো একসঙ্গে থাকবে
 
@@ -100,7 +100,7 @@ Core-এর initial event types হবে `ledger.journal_posted.v1` এবং `
 - `event_id` হবে stable outbox ID; publish retry বা replay-এ নতুন ID তৈরি হবে না। Consumer inbox-এ `(consumer_name, event_id)` unique key থাকবে। Financial request idempotency ও event deduplication আলাদা control।
 - Delivery হবে **at least once**। Consumer commit-এর পরে broker acknowledgment দেবে; crash/redelivery-এ inbox দ্বিতীয় side effect বন্ধ করবে। Notification provider deduplication না দিলে ambiguous timeout-এর পরে duplicate external delivery সম্ভব—exactly-once notification দাবি করা হবে না।
 - Global ordering ধরে নেওয়া যাবে না। Reversal event-এ original journal ID থাকবে; original event পরে এলে Reporting reversal pending রাখতে বা projection rebuild করতে পারবে। State-transition consumer-এ expected state/version check থাকবে। একই account-এর running balance order শুধুমাত্র timestamp দিয়ে নির্ধারণ করা যাবে না; authoritative history cursor এবং projection ordering contract implementation-এর আগে নির্ধারণ করতে হবে।
-- Bounded retry/backoff-এর পরে failed message DLQ-তে যাবে। Operator replay permission-checked ও audited হবে; replay inbox deduplication অতিক্রম করবে না। Historical rebuild-এর জন্য নতুন projection version/consumer namespace ব্যবহার করতে হবে।
+- Bounded retry/backoff-এর পরে failed message DLQ-তে যাবে। Administrator replay permission-checked ও audited হবে; replay inbox deduplication অতিক্রম করবে না। Historical rebuild-এর জন্য নতুন projection version/consumer namespace ব্যবহার করতে হবে।
 - Breaking payload change হলে নতুন event version এবং migration window লাগবে। Consumer contract tests, broker retention এবং retained event archive/replay policy extraction-এর আগে নির্ধারণ করতে হবে।
 
 ## ৬. Settlement-এর consistency model

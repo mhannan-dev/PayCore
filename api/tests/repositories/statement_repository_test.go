@@ -15,11 +15,11 @@ func TestStatementImportAtomicityOwnershipAndConcurrentDeduplication(t *testing.
 	f := newLedgerFixture(t)
 	ctx := context.Background()
 	users := repositories.NewUserRepository(f.pool)
-	owner, err := users.Create(ctx, "Importer", nil, "importer@example.test", "fixture hash", []string{models.RoleOperator})
+	owner, err := users.Create(ctx, "Importer", nil, "importer@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := users.Create(ctx, "Other", nil, "other@example.test", "fixture hash", []string{models.RoleOperator})
+	other, err := users.Create(ctx, "Other", nil, "other@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}

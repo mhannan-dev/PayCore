@@ -32,7 +32,7 @@ func newLedgerFixture(t *testing.T) *ledgerFixture {
 	pool := isolatedPool(t)
 	f := &ledgerFixture{pool: pool, repo: repositories.NewLedgerRepository(pool)}
 	f.svc = services.NewLedgerService(f.repo)
-	f.actor = models.UserDTO{ID: "11111111-1111-4111-8111-111111111111", Email: "operator@example.test"}
+	f.actor = models.UserDTO{ID: "11111111-1111-4111-8111-111111111111", Email: "accountant@example.test"}
 	ctx := context.Background()
 	create := func(number, name string, typ models.AccountType, currency models.Currency) models.Account {
 		a, err := f.svc.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{AccountNumber: number, Name: name, Type: typ, Currency: currency})

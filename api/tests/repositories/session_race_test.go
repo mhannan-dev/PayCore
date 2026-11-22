@@ -41,7 +41,7 @@ func TestPasswordResetRejectsAlreadyVerifiedLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := users.Create(ctx, "Regression", nil, "race@example.test", oldHash, []string{"OPERATOR"})
+	u, err := users.Create(ctx, "Regression", nil, "race@example.test", oldHash, []string{"ACCOUNTANT"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSessionIssuanceLocksCredentialSnapshot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	users := repositories.NewUserRepository(pool)
-	u, err := users.Create(ctx, "Lock test", nil, "lock@example.test", "initial", []string{"OPERATOR"})
+	u, err := users.Create(ctx, "Lock test", nil, "lock@example.test", "initial", []string{"ACCOUNTANT"})
 	if err != nil {
 		t.Fatal(err)
 	}

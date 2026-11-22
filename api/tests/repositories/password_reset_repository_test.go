@@ -23,7 +23,7 @@ func TestPasswordResetLifecycle(t *testing.T) {
 	digest := func(s string) []byte { d := sha256.Sum256([]byte(s)); return d[:] }
 
 	// An invited user with an open invitation and a live session.
-	u, err := invites.CreateInvitedUser(ctx, "Reset", nil, email, []string{"OPERATOR"}, digest(email+"invite"), time.Now().Add(time.Hour), "")
+	u, err := invites.CreateInvitedUser(ctx, "Reset", nil, email, []string{"ACCOUNTANT"}, digest(email+"invite"), time.Now().Add(time.Hour), "")
 	if err != nil {
 		t.Fatal(err)
 	}

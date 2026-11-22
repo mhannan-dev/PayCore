@@ -29,7 +29,7 @@ export const PERMISSIONS = {
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-export const ROLE_CODES = ["ADMIN", "OPERATOR", "LEAD_OPERATOR", "COMPLIANCE_AUDITOR", "STAFF_ENGINEER"] as const;
+export const ROLE_CODES = ["ADMIN", "ACCOUNTANT", "COMPLIANCE_AUDITOR"] as const;
 
 /** Permission each route needs; routes not listed are open to every signed-in user. */
 export const ROUTE_PERMISSIONS: Record<string, Permission> = {

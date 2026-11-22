@@ -33,7 +33,7 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	digest := func(s string) []byte { d := sha256.Sum256([]byte(s)); return d[:] }
 	expires := time.Now().Add(time.Hour)
 
-	u, err := invites.CreateInvitedUser(ctx, "Invitee", nil, email, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}, digest(email+"1"), expires, "", emailDraft)
+	u, err := invites.CreateInvitedUser(ctx, "Invitee", nil, email, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}, digest(email+"1"), expires, "", emailDraft)
 	if err != nil || u.PasswordSet || u.InviteExpiresAt == nil || !u.IsActive {
 		t.Fatalf("create: %+v %v", u, err)
 	}
@@ -41,7 +41,7 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM user_roles WHERE user_id = $1", u.ID).Scan(&mirrored); err != nil || mirrored != 2 {
 		t.Fatalf("user_roles mirror: %d %v", mirrored, err)
 	}
-	if _, err := invites.CreateInvitedUser(ctx, "Again", nil, email, []string{"OPERATOR"}, digest(email+"x"), expires, ""); !errors.Is(err, repositories.ErrEmailTaken) {
+	if _, err := invites.CreateInvitedUser(ctx, "Again", nil, email, []string{"ACCOUNTANT"}, digest(email+"x"), expires, ""); !errors.Is(err, repositories.ErrEmailTaken) {
 		t.Fatalf("duplicate email: %v", err)
 	}
 	// An invited user has no password: login lookup sees an empty hash.
@@ -80,8 +80,10 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	if err != nil || total != 1 || len(page) != 1 || page[0].ID != u.ID {
 		t.Fatalf("search: %d %+v %v", total, page, err)
 	}
-	if _, total, err := rbac.ListUsers(ctx, models.UserQuery{Search: email, Role: "STAFF_ENGINEER", Limit: 10}); err != nil || total != 0 {
-		t.Fatalf("role filter: %d %v", total, err)
+	for _, legacy := range []string{"OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		if _, total, err := rbac.ListUsers(ctx, models.UserQuery{Search: email, Role: legacy, Limit: 10}); err != nil || total != 0 {
+			t.Fatalf("legacy role filter %s: %d %v", legacy, total, err)
+		}
 	}
 	if _, total, err := rbac.ListUsers(ctx, models.UserQuery{Search: "invite_%", Limit: 10}); err != nil || total != 0 {
 		t.Fatalf("wildcards must match literally: %d %v", total, err)
@@ -115,9 +117,14 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 		t.Fatalf("reissue after activation: %v", err)
 	}
 
-	u, err = rbac.SetUserRoles(ctx, u.ID, []string{"STAFF_ENGINEER"})
-	if err != nil || strings.Join(u.Roles, ",") != "STAFF_ENGINEER" || !u.PasswordSet || u.InviteExpiresAt != nil {
+	u, err = rbac.SetUserRoles(ctx, u.ID, []string{"ACCOUNTANT"})
+	if err != nil || strings.Join(u.Roles, ",") != "ACCOUNTANT" || !u.PasswordSet || u.InviteExpiresAt != nil {
 		t.Fatalf("set roles: %+v %v", u, err)
+	}
+	for _, legacy := range []string{"OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		if _, err := rbac.SetUserRoles(ctx, u.ID, []string{legacy}); err == nil {
+			t.Fatalf("legacy role accepted by SetUserRoles: %s", legacy)
+		}
 	}
 
 	if err := rbac.DeleteUser(ctx, u.ID); err != nil {
@@ -134,7 +141,7 @@ func TestInvitationLifecycleAndRoles(t *testing.T) {
 	// Expired links do not work.
 	expired := fmt.Sprintf("expired-%d@example.test", time.Now().UnixNano())
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE email = $1", expired) })
-	if _, err := invites.CreateInvitedUser(ctx, "Late", nil, expired, []string{"OPERATOR"}, digest(expired), time.Now().Add(time.Hour), ""); err != nil {
+	if _, err := invites.CreateInvitedUser(ctx, "Late", nil, expired, []string{"ACCOUNTANT"}, digest(expired), time.Now().Add(time.Hour), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE user_invitations SET created_at = NOW() - interval '2 hours', expires_at = NOW() - interval '1 second' WHERE token_hash = $1", digest(expired)); err != nil {

@@ -36,7 +36,7 @@ func (s *notificationTransportStore) Retry(context.Context, string, int) error {
 	return nil
 }
 func TestNotificationEndpoints(t *testing.T) {
-	caller := models.User{ID: adminID, Email: "operator@example.test", IsActive: true, Permissions: []string{models.PermNotificationsRead, models.PermNotificationsRetry}}
+	caller := models.User{ID: adminID, Email: "accountant@example.test", IsActive: true, Permissions: []string{models.PermNotificationsRead, models.PermNotificationsRetry}}
 	auth, token := sessionAuth(t, caller)
 	store := &notificationTransportStore{}
 	router := server.New(nil, server.Controllers{Notifications: controllers.NewNotificationController(services.NewNotificationService(store)), AuthMiddleware: middleware.NewAuth(auth)})

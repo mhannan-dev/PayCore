@@ -158,7 +158,7 @@ func TestMFALockoutExpiryAndPromotion(t *testing.T) {
 	pool := isolatedPool(t)
 	ctx := context.Background()
 	users := repositories.NewUserRepository(pool)
-	u, err := users.Create(ctx, "Promotion", nil, "promotion@example.test", "fixture hash", []string{models.RoleOperator})
+	u, err := users.Create(ctx, "Promotion", nil, "promotion@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}

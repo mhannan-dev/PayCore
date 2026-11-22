@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"paycore/api/database/seeders"
 	"paycore/api/internal/audit"
 	"paycore/api/internal/http/controllers"
 	"paycore/api/internal/http/middleware"
@@ -24,6 +25,37 @@ import (
 	"paycore/api/internal/server"
 	"paycore/api/internal/services"
 )
+
+func TestDefaultNonAdminUserDirectoryAccess(t *testing.T) {
+	for _, role := range []string{models.RoleAccountant, models.RoleComplianceAuditor} {
+		t.Run(role, func(t *testing.T) {
+			router, _, token := rbacRouter(t, models.User{
+				ID: memberID, Email: "reader@example.test", Roles: []string{role}, IsActive: true,
+				Permissions: seeders.DefaultRolePermissions()[role],
+			})
+			for _, path := range []string{"/api/v1/users", "/api/v1/rbac/roles", "/api/v1/rbac/permissions"} {
+				if response := router.do(http.MethodGet, path, "", token); response.Code != http.StatusOK {
+					t.Fatalf("%s read %s: %d %s", role, path, response.Code, response.Body)
+				}
+			}
+			for _, action := range []struct {
+				method, path, body string
+			}{
+				{http.MethodPost, "/api/v1/users", `{"first_name":"Invited","email":"invited@example.test","roles":["ACCOUNTANT"]}`},
+				{http.MethodPost, "/api/v1/users/" + adminID + "/invitation", ""},
+				{http.MethodPut, "/api/v1/users/" + adminID + "/roles", `{"roles":["ACCOUNTANT"]}`},
+				{http.MethodPost, "/api/v1/users/" + adminID + "/deactivate", ""},
+				{http.MethodPost, "/api/v1/users/" + adminID + "/activate", ""},
+				{http.MethodDelete, "/api/v1/users/" + adminID, ""},
+			} {
+				response := router.do(action.method, action.path, action.body, token)
+				if response.Code != http.StatusForbidden || errorCode(t, response) != "permission_denied" {
+					t.Fatalf("%s write %s %s: %d %s", role, action.method, action.path, response.Code, response.Body)
+				}
+			}
+		})
+	}
+}
 
 type rbacStore struct {
 	lastActor audit.Actor
@@ -101,8 +133,8 @@ func rbacRouterWithInvites(t *testing.T, caller models.User) (*testRouter, *rbac
 		t.Fatal(err)
 	}
 	repo := &rbacStore{users: map[string]models.ManagedUser{
-		adminID:  {ID: adminID, Email: "admin@example.test", Roles: []string{"ADMIN", "OPERATOR"}, IsActive: true},
-		memberID: {ID: memberID, Email: "member@example.test", Roles: []string{"OPERATOR"}, IsActive: true},
+		adminID:  {ID: adminID, Email: "admin@example.test", Roles: []string{"ADMIN", "ACCOUNTANT"}, IsActive: true},
+		memberID: {ID: memberID, Email: "member@example.test", Roles: []string{"ACCOUNTANT"}, IsActive: true},
 	}}
 	invites := &inviteStore{taken: map[string]bool{"member@example.test": true}}
 	mail := &captureMail{}
@@ -148,7 +180,7 @@ var adminCaller = models.User{ID: adminID, FirstName: "Admin", Email: "admin@exa
 	Permissions: []string{models.PermUsersRead, models.PermUsersWrite}}
 
 func TestRBACRequiresSessionAndPermission(t *testing.T) {
-	r, _, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"OPERATOR"}, IsActive: true, Permissions: []string{models.PermLedgerRead}})
+	r, _, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"ACCOUNTANT"}, IsActive: true, Permissions: []string{models.PermLedgerRead}})
 	if w := r.do(http.MethodGet, "/api/v1/users", "", ""); w.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: got %d", w.Code)
 	}
@@ -162,7 +194,7 @@ func TestRBACRequiresSessionAndPermission(t *testing.T) {
 }
 
 func TestRBACReadOnlyCannotChangeRoles(t *testing.T) {
-	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"LEAD_OPERATOR"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
+	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"ADMIN"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
 	if w := r.do(http.MethodGet, "/api/v1/users", "", token); w.Code != http.StatusOK {
 		t.Fatalf("users:read list: got %d", w.Code)
 	}
@@ -174,8 +206,8 @@ func TestRBACReadOnlyCannotChangeRoles(t *testing.T) {
 
 func TestRBACSetRoles(t *testing.T) {
 	r, repo, token := rbacRouter(t, adminCaller)
-	w := r.do(http.MethodPut, "/api/v1/users/"+memberID+"/roles", `{"roles":["operator"," COMPLIANCE_AUDITOR ","OPERATOR"]}`, token)
-	if w.Code != http.StatusOK || strings.Join(repo.saved, ",") != "OPERATOR,COMPLIANCE_AUDITOR" {
+	w := r.do(http.MethodPut, "/api/v1/users/"+memberID+"/roles", `{"roles":["accountant"," COMPLIANCE_AUDITOR ","ACCOUNTANT"]}`, token)
+	if w.Code != http.StatusOK || strings.Join(repo.saved, ",") != "ACCOUNTANT,COMPLIANCE_AUDITOR" {
 		t.Fatalf("set roles: got %d %s, saved %v", w.Code, w.Body, repo.saved)
 	}
 
@@ -185,9 +217,12 @@ func TestRBACSetRoles(t *testing.T) {
 	}{
 		{"empty roles", memberID, `{"roles":[]}`, "invalid_roles", http.StatusBadRequest},
 		{"unknown role", memberID, `{"roles":["ROOT"]}`, "invalid_roles", http.StatusBadRequest},
-		{"bad id", "not-a-uuid", `{"roles":["OPERATOR"]}`, "user_not_found", http.StatusNotFound},
-		{"unknown user", "33333333-3333-4333-8333-333333333333", `{"roles":["OPERATOR"]}`, "user_not_found", http.StatusNotFound},
-		{"own admin", adminID, `{"roles":["OPERATOR"]}`, "cannot_remove_own_admin", http.StatusConflict},
+		{"legacy OPERATOR", memberID, `{"roles":["OPERATOR"]}`, "invalid_roles", http.StatusBadRequest},
+		{"legacy LEAD_OPERATOR", memberID, `{"roles":["LEAD_OPERATOR"]}`, "invalid_roles", http.StatusBadRequest},
+		{"legacy STAFF_ENGINEER", memberID, `{"roles":["STAFF_ENGINEER"]}`, "invalid_roles", http.StatusBadRequest},
+		{"bad id", "not-a-uuid", `{"roles":["ACCOUNTANT"]}`, "user_not_found", http.StatusNotFound},
+		{"unknown user", "33333333-3333-4333-8333-333333333333", `{"roles":["ACCOUNTANT"]}`, "user_not_found", http.StatusNotFound},
+		{"own admin", adminID, `{"roles":["ACCOUNTANT"]}`, "cannot_remove_own_admin", http.StatusConflict},
 	}
 	for _, tc := range cases {
 		w := r.do(http.MethodPut, "/api/v1/users/"+tc.id+"/roles", tc.body, token)
@@ -197,7 +232,7 @@ func TestRBACSetRoles(t *testing.T) {
 	}
 
 	repo.lastErr = repositories.ErrLastAdmin
-	w = r.do(http.MethodPut, "/api/v1/users/"+memberID+"/roles", `{"roles":["OPERATOR"]}`, token)
+	w = r.do(http.MethodPut, "/api/v1/users/"+memberID+"/roles", `{"roles":["ACCOUNTANT"]}`, token)
 	if w.Code != http.StatusConflict || errorCode(t, w) != "last_admin" {
 		t.Fatalf("last admin: got %d %s", w.Code, w.Body)
 	}
@@ -374,10 +409,13 @@ func TestRBACInviteUser(t *testing.T) {
 		name, body, code string
 		status           int
 	}{
-		{"duplicate email", `{"first_name":"A","email":"member@example.test","roles":["OPERATOR"]}`, "email_taken", http.StatusConflict},
-		{"bad email", `{"first_name":"A","email":"not-an-email","roles":["OPERATOR"]}`, "invalid_user", http.StatusBadRequest},
-		{"no first name", `{"first_name":"  ","email":"a@example.test","roles":["OPERATOR"]}`, "invalid_user", http.StatusBadRequest},
+		{"duplicate email", `{"first_name":"A","email":"member@example.test","roles":["ACCOUNTANT"]}`, "email_taken", http.StatusConflict},
+		{"bad email", `{"first_name":"A","email":"not-an-email","roles":["ACCOUNTANT"]}`, "invalid_user", http.StatusBadRequest},
+		{"no first name", `{"first_name":"  ","email":"a@example.test","roles":["ACCOUNTANT"]}`, "invalid_user", http.StatusBadRequest},
 		{"no roles", `{"first_name":"A","email":"a@example.test","roles":[]}`, "invalid_user", http.StatusBadRequest},
+		{"legacy OPERATOR", `{"first_name":"A","email":"a@example.test","roles":["OPERATOR"]}`, "invalid_user", http.StatusBadRequest},
+		{"legacy LEAD_OPERATOR", `{"first_name":"A","email":"a@example.test","roles":["LEAD_OPERATOR"]}`, "invalid_user", http.StatusBadRequest},
+		{"legacy STAFF_ENGINEER", `{"first_name":"A","email":"a@example.test","roles":["STAFF_ENGINEER"]}`, "invalid_user", http.StatusBadRequest},
 		{"not json", `nope`, "invalid_request", http.StatusBadRequest},
 	}
 	for _, tc := range cases {
@@ -393,7 +431,7 @@ func TestRBACInviteUser(t *testing.T) {
 func TestRBACInviteReportsEmailFailure(t *testing.T) {
 	r, _, invites, mail, token := rbacRouterWithInvites(t, adminCaller)
 	mail.fail = true
-	w := r.do(http.MethodPost, "/api/v1/users", `{"first_name":"A","email":"a@example.test","roles":["OPERATOR"]}`, token)
+	w := r.do(http.MethodPost, "/api/v1/users", `{"first_name":"A","email":"a@example.test","roles":["ACCOUNTANT"]}`, token)
 	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"email_status":"pending"`) || len(invites.created) != 1 {
 		t.Fatalf("send failure: %d %s", w.Code, w.Body)
 	}
@@ -417,7 +455,7 @@ func TestRBACResendInvitation(t *testing.T) {
 }
 
 func TestRBACInviteNeedsWrite(t *testing.T) {
-	r, _, invites, _, token := rbacRouterWithInvites(t, models.User{ID: memberID, Roles: []string{"LEAD_OPERATOR"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
+	r, _, invites, _, token := rbacRouterWithInvites(t, models.User{ID: memberID, Roles: []string{"ADMIN"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
 	w := r.do(http.MethodPost, "/api/v1/users", `{"first_name":"A","email":"a@example.test","roles":["ADMIN"]}`, token)
 	if w.Code != http.StatusForbidden || len(invites.created) != 0 {
 		t.Fatalf("users:read must not invite: got %d", w.Code)
@@ -452,7 +490,7 @@ func TestRBACDeleteUser(t *testing.T) {
 }
 
 func TestRBACDeleteUserNeedsWrite(t *testing.T) {
-	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"LEAD_OPERATOR"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
+	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"ADMIN"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
 	if w := r.do(http.MethodDelete, "/api/v1/users/"+adminID, "", token); w.Code != http.StatusForbidden || len(repo.users) != 2 {
 		t.Fatalf("users:read must not delete: %d", w.Code)
 	}
@@ -479,7 +517,7 @@ func TestRBACUsersPaging(t *testing.T) {
 	if w := r.do(http.MethodGet, "/api/v1/users", "", token); w.Code != http.StatusOK || repo.lastQuery.Limit != 20 || repo.lastQuery.Offset != 0 {
 		t.Fatalf("defaults: %d %+v", w.Code, repo.lastQuery)
 	}
-	for _, bad := range []string{"limit=0", "limit=101", "limit=x", "offset=-1", "role=ROOT", "q=" + strings.Repeat("a", 101)} {
+	for _, bad := range []string{"limit=0", "limit=101", "limit=x", "offset=-1", "role=ROOT", "role=OPERATOR", "role=LEAD_OPERATOR", "role=STAFF_ENGINEER", "q=" + strings.Repeat("a", 101)} {
 		if w := r.do(http.MethodGet, "/api/v1/users?"+bad, "", token); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: got %d", bad, w.Code)
 		}
@@ -491,7 +529,7 @@ type fakeAuditLog struct{ last repositories.AuditQuery }
 func (f *fakeAuditLog) List(_ context.Context, q repositories.AuditQuery) ([]audit.Event, int, error) {
 	f.last = q
 	return []audit.Event{{ID: 7, Action: audit.RolesChanged, TargetEmail: audit.Ptr("member@example.test"),
-		Details: audit.Details{RolesBefore: []string{"OPERATOR"}, RolesAfter: []string{"ADMIN"}}}}, 1, nil
+		Details: audit.Details{RolesBefore: []string{"ACCOUNTANT"}, RolesAfter: []string{"ADMIN"}}}}, 1, nil
 }
 
 func TestRBACDeactivateActivate(t *testing.T) {
@@ -519,7 +557,7 @@ func TestRBACDeactivateActivate(t *testing.T) {
 }
 
 func TestRBACDeactivateNeedsWrite(t *testing.T) {
-	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"LEAD_OPERATOR"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
+	r, repo, token := rbacRouter(t, models.User{ID: memberID, Roles: []string{"ADMIN"}, IsActive: true, Permissions: []string{models.PermUsersRead}})
 	if w := r.do(http.MethodPost, "/api/v1/users/"+adminID+"/deactivate", "", token); w.Code != http.StatusForbidden || !repo.users[adminID].IsActive {
 		t.Fatalf("users:read must not deactivate: %d", w.Code)
 	}
@@ -529,7 +567,7 @@ func TestAuditEventsEndpoint(t *testing.T) {
 	auditor := models.User{ID: memberID, Email: "auditor@example.test", Roles: []string{"COMPLIANCE_AUDITOR"}, IsActive: true, Permissions: []string{models.PermAuditRead}}
 	r, _, token := rbacRouter(t, auditor)
 	w := r.do(http.MethodGet, "/api/v1/audit/events?action=roles_changed&q=member&limit=10&offset=20", "", token)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"roles_before":["OPERATOR"]`) || !strings.Contains(w.Body.String(), `"total":1`) {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"roles_before":["ACCOUNTANT"]`) || !strings.Contains(w.Body.String(), `"total":1`) {
 		t.Fatalf("list: %d %s", w.Code, w.Body)
 	}
 	for _, bad := range []string{"action=drop_table", "limit=0", "limit=201", "offset=-1", "q=" + strings.Repeat("x", 101)} {
@@ -537,7 +575,7 @@ func TestAuditEventsEndpoint(t *testing.T) {
 			t.Errorf("%s: got %d", bad, w.Code)
 		}
 	}
-	noAudit, _, token2 := rbacRouter(t, models.User{ID: memberID, Roles: []string{"OPERATOR"}, IsActive: true, Permissions: []string{models.PermLedgerRead}})
+	noAudit, _, token2 := rbacRouter(t, models.User{ID: memberID, Roles: []string{"ACCOUNTANT"}, IsActive: true, Permissions: []string{models.PermLedgerRead}})
 	if w := noAudit.do(http.MethodGet, "/api/v1/audit/events", "", token2); w.Code != http.StatusForbidden {
 		t.Fatalf("without audit:read: %d", w.Code)
 	}

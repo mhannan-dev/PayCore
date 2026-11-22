@@ -43,7 +43,7 @@ The table records ID, owner, display filename, server-detected MIME type, byte s
 
 ## Endpoints
 
-Every request requires the real backend bearer token and an explicit capability: `attachments:read` for listing/metadata/download/photo bytes, `attachments:write` for upload/photo assignment or clearing, and `attachments:delete` for deletion. Migration 016 grants these own-file capabilities to all five built-in roles. Owner IDs are taken from the session, not client input. Even ADMIN does not automatically gain access to another user's files. Missing permission returns `403`; an inaccessible or other-user attachment still returns `404` once the caller has the route's capability.
+Every request requires the real backend bearer token and an explicit capability: `attachments:read` for listing/metadata/download/photo bytes, `attachments:write` for upload/photo assignment or clearing, and `attachments:delete` for deletion. Migration 016 grants these own-file capabilities to all three built-in roles. Owner IDs are taken from the session, not client input. Even ADMIN does not automatically gain access to another user's files. Missing permission returns `403`; an inaccessible or other-user attachment still returns `404` once the caller has the route's capability.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |

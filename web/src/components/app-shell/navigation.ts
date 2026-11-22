@@ -21,6 +21,7 @@ export const NAVIGATION: NavItem[] = [
 
 const EXTRA_PAGE_LABELS: Record<string, string> = {
   "/profile": "User profile",
+  "/docs": "User guide",
 };
 
 export const pageLabel = (pathname: string) =>

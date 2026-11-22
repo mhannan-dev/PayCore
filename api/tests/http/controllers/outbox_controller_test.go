@@ -29,7 +29,7 @@ func (f *fakeOutboxService) Replay(_ context.Context, ids ...string) (models.Out
 
 func TestOutboxHTTP(t *testing.T) {
 	caller := models.User{
-		ID: adminID, Email: "sre@example.test", Roles: []string{"STAFF_ENGINEER"}, IsActive: true,
+		ID: adminID, Email: "admin@example.test", Roles: []string{"ADMIN"}, IsActive: true,
 		Permissions: []string{models.PermSystemRead, models.PermSystemWrite},
 	}
 	auth, token := sessionAuth(t, caller)

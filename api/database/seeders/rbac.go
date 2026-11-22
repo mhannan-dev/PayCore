@@ -22,10 +22,8 @@ type PermissionDefinition struct {
 func DefaultRoles() []RoleDefinition {
 	return []RoleDefinition{
 		{Code: models.RoleAdmin, Name: "System Administrator", Description: "Full system administrative, configuration, and user management control"},
-		{Code: models.RoleOperator, Name: "Standard Operator", Description: "Basic financial operations and ledger reading"},
-		{Code: models.RoleLeadOperator, Name: "Lead Operator", Description: "High-value ledger transfers, batch operations, and transaction reversals"},
+		{Code: models.RoleAccountant, Name: "Accountant", Description: "Daily financial operations and ledger reading"},
 		{Code: models.RoleComplianceAuditor, Name: "Compliance Auditor", Description: "Financial audit, zero-sum invariant verification, and compliance reporting"},
-		{Code: models.RoleStaffEngineer, Name: "Staff SRE / Engineer", Description: "Infrastructure diagnostics, request simulator, and system telemetry"},
 	}
 }
 
@@ -76,27 +74,19 @@ func DefaultRolePermissions() map[string][]string {
 			models.PermSystemRead, models.PermSystemWrite,
 			models.PermAccountsWrite,
 		},
-		models.RoleLeadOperator: {
-			models.PermNotificationsRead,
-			models.PermReconciliationMatch,
-			models.PermReconciliationRead, models.PermReconciliationImport,
-			models.PermAttachmentsRead, models.PermAttachmentsWrite, models.PermAttachmentsDelete,
-			models.PermAccountsWrite,
+		models.RoleAccountant: {
 			models.PermUsersRead,
-			models.PermTransfersRead, models.PermTransfersCreate, models.PermTransfersReverse,
-			models.PermLedgerRead,
-			models.PermAuditRead,
-			models.PermReportsRead,
-		},
-		models.RoleOperator: {
 			models.PermNotificationsRead,
 			models.PermReconciliationMatch,
 			models.PermReconciliationRead, models.PermReconciliationImport,
 			models.PermAttachmentsRead, models.PermAttachmentsWrite, models.PermAttachmentsDelete,
 			models.PermTransfersRead, models.PermTransfersCreate,
 			models.PermLedgerRead,
+			models.PermReportsRead,                          // migration 027
+			models.PermQuantumRead, models.PermQuantumWrite, // migration 027; own merchant only
 		},
 		models.RoleComplianceAuditor: {
+			models.PermUsersRead,
 			models.PermNotificationsRead,
 			models.PermReconciliationRead,
 			models.PermAttachmentsRead, models.PermAttachmentsWrite, models.PermAttachmentsDelete,
@@ -104,15 +94,7 @@ func DefaultRolePermissions() map[string][]string {
 			models.PermLedgerRead,
 			models.PermAuditRead, models.PermAuditVerify,
 			models.PermReportsRead, models.PermReportsExport,
-		},
-		models.RoleStaffEngineer: {
-			models.PermNotificationsRetry,
-			models.PermNotificationsRead,
-			models.PermAttachmentsRead, models.PermAttachmentsWrite, models.PermAttachmentsDelete,
-			models.PermLedgerRead,
-			models.PermAuditRead,
-			models.PermSimulatorRun,
-			models.PermSystemRead, models.PermSystemWrite,
+			models.PermSystemRead, // migration 027; read-only delivery health
 		},
 	}
 }

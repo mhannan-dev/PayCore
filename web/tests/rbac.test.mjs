@@ -10,6 +10,13 @@ const { outputText } = ts.transpileModule(source, { compilerOptions: { module: t
 const rbac = {};
 vm.runInNewContext(outputText, { exports: rbac });
 
+test("user-directory readers can open access pages without management controls", () => {
+  const grants = [rbac.PERMISSIONS.usersRead];
+  assert.equal(rbac.canVisit(grants, "/admin/users"), true);
+  assert.equal(rbac.canVisit(grants, "/admin/roles"), true);
+  assert.equal(rbac.hasPermission(grants, rbac.PERMISSIONS.usersWrite), false);
+});
+
 test("unknown grants deny protected controls", () => {
   assert.equal(rbac.hasPermission(null, "users:write"), false);
   assert.equal(rbac.hasPermission([], "users:write"), false);

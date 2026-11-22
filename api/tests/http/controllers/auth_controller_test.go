@@ -48,7 +48,7 @@ func TestLoginHTTPContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &testStore{user: models.User{ID: "test-user", Email: "operator@example.test", FirstName: "Operator", PasswordHash: hash, Roles: []string{"OPERATOR", "STAFF_ENGINEER"}, IsActive: true}}
+	store := &testStore{user: models.User{ID: "test-user", Email: "accountant@example.test", FirstName: "Accountant", PasswordHash: hash, Roles: []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}, IsActive: true}}
 	verifier := &testCaptcha{}
 	auth, err := services.NewAuthService(store, verifier)
 	if err != nil {
@@ -65,11 +65,11 @@ func TestLoginHTTPContract(t *testing.T) {
 		router.ServeHTTP(w, r)
 		return w
 	}
-	body := `{"email":"operator@example.test","password":"Sample#h01","captcha_id":"` + strings.Repeat("a", 64) + `","captcha_answer":"12"}`
+	body := `{"email":"accountant@example.test","password":"Sample#h01","captcha_id":"` + strings.Repeat("a", 64) + `","captcha_answer":"12"}`
 	if w := request("POST", "/api/v1/auth/login", strings.TrimSuffix(body, "}")+`,"roles":["ADMIN"]}`, ""); w.Code != http.StatusBadRequest {
 		t.Fatal("unknown login fields accepted")
 	}
-	if w := request("POST", "/api/v1/auth/login", `{"email":"operator@example.test","password":"anything"}`, ""); w.Code != http.StatusBadRequest {
+	if w := request("POST", "/api/v1/auth/login", `{"email":"accountant@example.test","password":"anything"}`, ""); w.Code != http.StatusBadRequest {
 		t.Fatal("login without CAPTCHA accepted")
 	}
 	verifier.valid = true
@@ -85,10 +85,10 @@ func TestLoginHTTPContract(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if (len(response.User.Roles) != 2 || response.User.Roles[0] != "OPERATOR" || response.User.Roles[1] != "STAFF_ENGINEER") || strings.Contains(w.Body.String(), hash) {
+	if (len(response.User.Roles) != 2 || response.User.Roles[0] != "ACCOUNTANT" || response.User.Roles[1] != "COMPLIANCE_AUDITOR") || strings.Contains(w.Body.String(), hash) {
 		t.Fatal("role escalation or password hash exposure")
 	}
-	if response.User.FirstName != "Operator" || response.User.LastName != nil || strings.Contains(w.Body.String(), `"name":`) {
+	if response.User.FirstName != "Accountant" || response.User.LastName != nil || strings.Contains(w.Body.String(), `"name":`) {
 		t.Fatal("user response must use first_name and nullable last_name, without name")
 	}
 	digest := sha256.Sum256([]byte(response.Token))
@@ -114,7 +114,7 @@ func TestUpdateMeHTTPContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := &testStore{user: models.User{ID: "test-user", Email: "operator@example.test", FirstName: "Operator", PasswordHash: hash, Roles: []string{"OPERATOR"}, IsActive: true}}
+	store := &testStore{user: models.User{ID: "test-user", Email: "accountant@example.test", FirstName: "Accountant", PasswordHash: hash, Roles: []string{"ACCOUNTANT"}, IsActive: true}}
 	auth, err := services.NewAuthService(store, &testCaptcha{valid: true})
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestUpdateMeHTTPContract(t *testing.T) {
 		router.ServeHTTP(w, r)
 		return w
 	}
-	w := request("POST", "/api/v1/auth/login", `{"email":"operator@example.test","password":"Sample#h01","captcha_id":"`+strings.Repeat("a", 64)+`","captcha_answer":"12"}`, "")
+	w := request("POST", "/api/v1/auth/login", `{"email":"accountant@example.test","password":"Sample#h01","captcha_id":"`+strings.Repeat("a", 64)+`","captcha_answer":"12"}`, "")
 	var login models.LoginResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &login); err != nil || login.Token == "" {
 		t.Fatal("login failed:", w.Body.String())
@@ -153,7 +153,7 @@ func TestUpdateMeHTTPContract(t *testing.T) {
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &u) != nil {
 		t.Fatal("valid profile update rejected:", w.Code, w.Body.String())
 	}
-	if u.FirstName != "Kenji" || u.LastName == nil || *u.LastName != "Sato" || u.Email != "operator@example.test" || len(u.Roles) != 1 || u.Roles[0] != "OPERATOR" {
+	if u.FirstName != "Kenji" || u.LastName == nil || *u.LastName != "Sato" || u.Email != "accountant@example.test" || len(u.Roles) != 1 || u.Roles[0] != "ACCOUNTANT" {
 		t.Fatalf("profile update changed the wrong fields: %+v", u)
 	}
 	if w.Header().Get("Cache-Control") != "no-store" {

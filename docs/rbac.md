@@ -1,6 +1,6 @@
 # Role-based access control
 
-Roles, permissions and their mapping live in migration `008_rbac.sql` (kept current by `seed-users`). A user's roles are `users.roles`, mirrored in `user_roles`; their permissions are the union of what those roles grant.
+Roles, permissions and their mapping live in migration `008_rbac.sql` (kept current by `seed-users`). A user's roles are `users.roles`, mirrored in `user_roles`; their permissions are the union of what those roles grant. Migration `026_accountant_roles.sql` consolidates the role set to ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR: OPERATOR becomes ACCOUNTANT, while LEAD_OPERATOR and STAFF_ENGINEER become ADMIN along with their permissions.
 
 ## Enforcement audit (19 November 2026)
 
@@ -11,7 +11,7 @@ Roles, permissions and their mapping live in migration `008_rbac.sql` (kept curr
 - File routes now require `attachments:read`, `attachments:write` or
   `attachments:delete` (migration `016_attachment_permissions.sql`). These are
   **own-file capabilities**; the service and database still enforce ownership.
-  All five existing roles receive these baseline grants to preserve their own-file
+  All three default roles receive these baseline grants to preserve their own-file
   workflows. Revoking a grant is enforced on the next API request.
 - `Guard.Require` accepts a typed permission code and denies empty or unknown
   requirements. Grants match exactly; malformed case/whitespace is not normalized
@@ -29,29 +29,39 @@ Roles, permissions and their mapping live in migration `008_rbac.sql` (kept curr
 Existing custom grants are preserved; the seeder explicitly restores default
 grants when run, so do not use it to preserve intentional default-role revocations.
 
-| Permission | ADMIN | OPERATOR | LEAD_OPERATOR | COMPLIANCE_AUDITOR | STAFF_ENGINEER |
-| --- | --- | --- | --- | --- | --- |
-| users:read | Y | — | Y | — | — |
-| users:write | Y | — | — | — | — |
-| accounts:write | Y | — | Y | — | — |
-| ledger:read | Y | Y | Y | Y | Y |
-| transfers:read | Y | Y | Y | Y | — |
-| transfers:create | Y | Y | Y | — | — |
-| transfers:reverse | Y | — | Y | — | — |
-| audit:read | Y | — | Y | Y | Y |
-| audit:verify | Y | — | — | Y | — |
-| reports:read | Y | — | Y | Y | — |
-| reports:export | Y | — | — | Y | — |
-| simulator:run | Y | — | — | — | Y |
-| system:read | Y | — | — | — | Y |
-| system:write | Y | — | — | — | Y |
-| attachments:read | Y | Y | Y | Y | Y |
-| attachments:write | Y | Y | Y | Y | Y |
-| attachments:delete | Y | Y | Y | Y | Y |
+| Permission | ADMIN | ACCOUNTANT | COMPLIANCE_AUDITOR |
+| --- | --- | --- | --- |
+| users:read | Y | Y | Y |
+| users:write | Y | — | — |
+| accounts:write | Y | — | — |
+| ledger:read | Y | Y | Y |
+| transfers:read | Y | Y | Y |
+| transfers:create | Y | Y | — |
+| transfers:reverse | Y | — | — |
+| audit:read | Y | — | Y |
+| audit:verify | Y | — | Y |
+| reports:read | Y | — | Y |
+| reports:export | Y | — | Y |
+| simulator:run | Y | — | — |
+| system:read | Y | — | — |
+| system:write | Y | — | — |
+| attachments:read | Y | Y | Y |
+| attachments:write | Y | Y | Y |
+| attachments:delete | Y | Y | Y |
+
+Migration `027_user_directory_read_access.sql` grants `users:read` to ACCOUNTANT
+and COMPLIANCE_AUDITOR on existing databases; the RBAC seeder applies the same
+default for new installations. Both roles can open **Users & access** and
+**Roles & permissions**, inspect users' names, emails, assigned roles, activation
+and invitation delivery status, and read the permission catalogue. These grants
+do not include `users:write`: inviting/resending, changing roles, activating,
+deactivating and deleting users remain ADMIN-only under the default policy.
+Refresh the console after deployment to reload navigation permissions. Existing
+bearer sessions receive the new effective grants on their next API request.
 
 `GET /api/v1/outbox/metrics` requires `system:read`; `POST /api/v1/outbox/replay`
-requires `system:write` (migration `021_outbox_delivery.sql`). Both ADMIN and
-STAFF_ENGINEER receive the new write grant, and every replay is audited.
+requires `system:write` (migration `021_outbox_delivery.sql`). ADMIN receives the
+new write grant, including the former STAFF_ENGINEER grant, and every replay is audited.
 
 Health endpoints and CAPTCHA/login/invitation/reset entry points remain public
 (token-entry endpoints retain validation and rate limits). `/auth/me`, self-name
@@ -93,7 +103,7 @@ continues to reject cross-user reads, downloads, photo assignment and deletion.
 | POST | `/api/v1/users/:id/invitation` | `users:write` | Re-sends the invitation with a new link (earlier links stop working). `409 already_activated` once a password is set |
 | POST | `/api/v1/auth/invitations/inspect` | public, rate limited | Body `{token}` → `{email, first_name, expires_at}`, or `404 invitation_invalid` |
 | POST | `/api/v1/auth/invitations/accept` | public, rate limited | Body `{token, password}` (exactly 10 characters) sets the password once → `{email}` |
-| PUT | `/api/v1/users/:id/roles` | `users:write` | Body `{"roles": ["OPERATOR"]}` replaces the role set |
+| PUT | `/api/v1/users/:id/roles` | `users:write` | Body `{"roles": ["ACCOUNTANT"]}` replaces the role set |
 | DELETE | `/api/v1/users/:id` | `users:write` | Permanently deletes the user (204); sessions, roles, invitations, contacts and attachment records cascade. `409 cannot_delete_self`, `409 last_admin` |
 | POST | `/api/v1/users/:id/deactivate` | `users:write` | Blocks sign-in and signs the user out everywhere; account and history are kept. `409 cannot_deactivate_self`, `409 last_admin` |
 | POST | `/api/v1/users/:id/activate` | `users:write` | Allows the user to sign in again |
@@ -159,9 +169,9 @@ All three endpoints are public, rate limited (`AuthRateLimit`) and `Cache-Contro
 
 Role changes, deactivation, activation and deletion are written **in the same transaction** as the change, so a change cannot happen without its audit entry. Other events are written right after they succeed; a failure to record them is logged but does not fail the request. The acting user comes from the authenticated request, and the IP from the connection (no proxy headers are trusted).
 
-The console shows the log at `/admin/audit-log` (needs `audit:read`: Admin, Lead operator, Compliance auditor, Staff engineer).
+The console shows the log at `/admin/audit-log` (needs `audit:read`: Admin and Compliance auditor).
 
 Deactivating a user (`users:write`) blocks sign-in, deletes their sessions and unused reset links, and keeps the account, roles and history; you cannot deactivate yourself or the last active Admin.
 
 
-Notification delivery history requires `notifications:read` (all five default roles). Manual retries require `notifications:retry` (ADMIN and STAFF_ENGINEER). A retry can only requeue a failed delivery event using its current attempt count; it does not move funds.
+Notification delivery history requires `notifications:read` (all three default roles). Manual retries require `notifications:retry` (ADMIN, including the former STAFF_ENGINEER grant). A retry can only requeue a failed delivery event using its current attempt count; it does not move funds.

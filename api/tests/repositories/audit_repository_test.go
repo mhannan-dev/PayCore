@@ -26,14 +26,14 @@ func TestAuditTrail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := invites.CreateInvitedUser(ctx, "Member", nil, "member@example.test", []string{"OPERATOR"}, digest("m"), time.Now().Add(time.Hour), "")
+	member, err := invites.CreateInvitedUser(ctx, "Member", nil, "member@example.test", []string{"ACCOUNTANT"}, digest("m"), time.Now().Add(time.Hour), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The request context carries the acting admin and where the request came from.
 	actx := audit.WithMeta(audit.WithActor(ctx, audit.Actor{ID: admin.ID, Email: admin.Email}), audit.Meta{IP: "203.0.113.7", UserAgent: "test-agent"})
 
-	if _, err := rbac.SetUserRoles(actx, member.ID, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}); err != nil {
+	if _, err := rbac.SetUserRoles(actx, member.ID, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}); err != nil {
 		t.Fatal(err)
 	}
 	events, total, err := log.List(ctx, repositories.AuditQuery{Action: audit.RolesChanged, Limit: 10})
@@ -42,8 +42,8 @@ func TestAuditTrail(t *testing.T) {
 	}
 	e := events[0]
 	if e.ActorID == nil || *e.ActorID != admin.ID || e.TargetEmail == nil || *e.TargetEmail != "member@example.test" ||
-		e.IP == nil || *e.IP != "203.0.113.7" || !slices.Equal(e.Details.RolesBefore, []string{"OPERATOR"}) ||
-		!slices.Equal(e.Details.RolesAfter, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}) {
+		e.IP == nil || *e.IP != "203.0.113.7" || !slices.Equal(e.Details.RolesBefore, []string{"ACCOUNTANT"}) ||
+		!slices.Equal(e.Details.RolesAfter, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}) {
 		t.Fatalf("roles_changed event: %+v", e)
 	}
 
@@ -85,7 +85,7 @@ func TestAuditTrail(t *testing.T) {
 	if err != nil || n != 4 { // roles_changed, deactivated, activated, deleted
 		t.Fatalf("history after delete: %d %v", n, err)
 	}
-	if history[0].Action != audit.UserDeleted || !slices.Equal(history[0].Details.RolesBefore, []string{"OPERATOR", "COMPLIANCE_AUDITOR"}) {
+	if history[0].Action != audit.UserDeleted || !slices.Equal(history[0].Details.RolesBefore, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}) {
 		t.Fatalf("newest event should be the delete: %+v", history[0])
 	}
 

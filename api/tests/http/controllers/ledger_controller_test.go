@@ -67,7 +67,7 @@ func (f *fakeLedger) Reverse(_ context.Context, _ models.UserDTO, key, id string
 
 func ledgerRouter(t *testing.T, permissions ...string) (*testRouter, *fakeLedger, string) {
 	t.Helper()
-	caller := models.User{ID: adminID, Email: "op@example.test", Roles: []string{"OPERATOR"}, IsActive: true, Permissions: permissions}
+	caller := models.User{ID: adminID, Email: "accountant@example.test", Roles: []string{"ACCOUNTANT"}, IsActive: true, Permissions: permissions}
 	auth, token := sessionAuth(t, caller)
 	ledger := &fakeLedger{}
 	router := server.New(nil, server.Controllers{Ledger: controllers.NewLedgerController(ledger), AuthMiddleware: middleware.NewAuth(auth)})

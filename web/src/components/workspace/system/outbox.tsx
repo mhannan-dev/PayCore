@@ -10,7 +10,7 @@ import { Badge, Heading, Panel, StatGrid } from "../../ui";
 import { ApiStatus } from "../shared/api-status";
 import { useApi } from "../shared/use-api";
 
-/** Operator view of committed ledger events waiting for broker delivery. */
+/** Administrator view of committed ledger events waiting for broker delivery. */
 export function Outbox() {
   const { session } = useAuthSession();
   const canReplay = hasPermission(session.permissions, PERMISSIONS.systemWrite);

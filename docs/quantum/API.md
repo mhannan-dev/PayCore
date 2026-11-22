@@ -95,3 +95,19 @@ The shared audit enum includes `quantum_payment_reorg`, mirrored in `web/src/lib
 ## Validation and scope
 
 `go vet ./...`, `go test ./...`, `golangci-lint run`, and the existing frontend check are regression gates. PostgreSQL tests use isolated schemas via `DATABASE_TEST_URL` from `docs/testing.md`. Local JSON-RPC fixtures and injected verifier fakes cover startup and verification; no automated test calls the live testnet. Repository tests cover ownership, constraints, idempotency, insufficient confirmations, duplicate claims, reorgs and concurrent finalization. A human-controlled wallet transaction and organizer eligibility confirmation remain separate demo/submission tasks; no live transaction hash is invented here.
+
+PostgreSQL validation on 2026-11-22: all seven Quantum repository tests passed against the local PayCore database, including both expired-intent replacement cases. Run from `api/` with `DATABASE_TEST_URL` configured:
+
+```powershell
+go test -v ./tests/repositories -run '^TestQuantum' -count=1 -timeout 3m
+```
+
+This exercised fresh migration 025, merchant isolation, request replay/conflicts, database constraints, insufficient confirmations, concurrent duplicate claims, cancellation versus confirmation, attempt admission, unused-intent expiry and replacement, and reorg invalidation/reconfirmation with audit and outbox persistence. Test schemas were isolated and cleaned up. These are local database results; they do not establish a live testnet payment or wallet end-to-end result.
+
+The full regression runner also passed on that date:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Integration
+```
+
+This ran `go vet ./...`, all Go tests with PostgreSQL integration enabled and serialized packages, `golangci-lint run` (zero issues), `npm run check`, and all 31 frontend tests. No application code changes were needed to pass this validation.

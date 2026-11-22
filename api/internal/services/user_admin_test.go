@@ -35,17 +35,19 @@ func TestUserAdminRules(t *testing.T) {
 	store := &adminStore{}
 	svc := NewUserAdminService(store, nil)
 
-	if _, err := svc.SetRoles(ctx, admin, "member", []string{"ROOT"}); !errors.Is(err, ErrInvalidRoles) {
-		t.Fatalf("unknown role: %v", err)
+	for _, invalid := range []string{"ROOT", "OPERATOR", "LEAD_OPERATOR", "STAFF_ENGINEER"} {
+		if _, err := svc.SetRoles(ctx, admin, "member", []string{invalid}); !errors.Is(err, ErrInvalidRoles) {
+			t.Fatalf("invalid role %s: %v", invalid, err)
+		}
 	}
 	if _, err := svc.SetRoles(ctx, admin, "member", nil); !errors.Is(err, ErrInvalidRoles) {
 		t.Fatalf("no roles: %v", err)
 	}
-	if _, err := svc.SetRoles(ctx, admin, "admin", []string{"OPERATOR"}); !errors.Is(err, ErrCannotRemoveOwnAdmin) {
+	if _, err := svc.SetRoles(ctx, admin, "admin", []string{"ACCOUNTANT"}); !errors.Is(err, ErrCannotRemoveOwnAdmin) {
 		t.Fatalf("own admin: %v", err)
 	}
-	if u, err := svc.SetRoles(ctx, admin, "member", []string{" operator ", "OPERATOR", "compliance_auditor"}); err != nil ||
-		len(store.setRoles) != 2 || store.setRoles[0] != "OPERATOR" || u.ID != "member" {
+	if u, err := svc.SetRoles(ctx, admin, "member", []string{" accountant ", "ACCOUNTANT", "compliance_auditor"}); err != nil ||
+		len(store.setRoles) != 2 || store.setRoles[0] != "ACCOUNTANT" || u.ID != "member" {
 		t.Fatalf("normalized roles: %v %v", store.setRoles, err)
 	}
 	if err := svc.Delete(ctx, admin, "admin"); !errors.Is(err, ErrCannotDeleteSelf) || store.deleted != "" {

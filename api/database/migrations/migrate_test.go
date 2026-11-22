@@ -122,19 +122,22 @@ func TestFreshAndLegacyUserSchema(t *testing.T) {
 			if err := pool.QueryRow(ctx, "SELECT roles FROM users LIMIT 1").Scan(&roles); err != nil {
 				t.Fatal(err)
 			}
-			expectedRole := "OPERATOR"
+			expectedRole := "ACCOUNTANT"
 			if legacy {
-				expectedRole = "LEAD_OPERATOR"
+				expectedRole = "ADMIN"
 			}
 			if len(roles) != 1 || roles[0] != expectedRole {
-				t.Fatal("legacy role was not preserved")
+				t.Fatal("default role or legacy role migration failed")
 			}
-			for _, invalid := range []string{"ARRAY[]::TEXT[]", "ARRAY['UNKNOWN']", "ARRAY['ADMIN','ADMIN']", "ARRAY['ADMIN',NULL]"} {
+			for _, invalid := range []string{
+				"ARRAY[]::TEXT[]", "ARRAY['UNKNOWN']", "ARRAY['ADMIN','ADMIN']", "ARRAY['ADMIN',NULL]",
+				"ARRAY['OPERATOR']", "ARRAY['LEAD_OPERATOR']", "ARRAY['STAFF_ENGINEER']",
+			} {
 				if _, err := pool.Exec(ctx, "UPDATE users SET roles = "+invalid); err == nil {
 					t.Fatal("invalid role array accepted:", invalid)
 				}
 			}
-			if _, err := pool.Exec(ctx, "UPDATE users SET roles = ARRAY['ADMIN','OPERATOR']"); err != nil {
+			if _, err := pool.Exec(ctx, "UPDATE users SET roles = ARRAY['ADMIN','ACCOUNTANT']"); err != nil {
 				t.Fatal("multiple valid roles rejected:", err)
 			}
 			var nameExists bool

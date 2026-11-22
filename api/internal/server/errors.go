@@ -72,7 +72,7 @@ var ErrorTable = apperr.Table{
 
 	// User administration
 	{Match: invalidNewUser},
-	{Target: services.ErrInvalidRoles, Error: apperr.BadRequest("invalid_roles", "Choose at least one role from ADMIN, OPERATOR, LEAD_OPERATOR, COMPLIANCE_AUDITOR and STAFF_ENGINEER.")},
+	{Target: services.ErrInvalidRoles, Error: apperr.BadRequest("invalid_roles", "Choose at least one role from ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR.")},
 	{Target: services.ErrCannotRemoveOwnAdmin, Error: apperr.New(http.StatusConflict, "cannot_remove_own_admin", "You cannot remove your own Admin role. Ask another administrator.")},
 	{Target: services.ErrCannotDeleteSelf, Error: apperr.New(http.StatusConflict, "cannot_delete_self", "You cannot delete your own account. Ask another administrator.")},
 	{Target: services.ErrCannotDeactivateSelf, Error: apperr.New(http.StatusConflict, "cannot_deactivate_self", "You cannot deactivate your own account. Ask another administrator.")},

@@ -30,7 +30,7 @@ func TestDurableInvitationLocalSMTP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	svc := services.NewInvitationService(repositories.NewInvitationRepository(pool), true, "http://web.test")
-	u, status, err := svc.Invite(ctx, models.CreateUserRequest{FirstName: "Durable SMTP", Email: "durable-delivery-check@example.test", Roles: []string{"OPERATOR"}}, "")
+	u, status, err := svc.Invite(ctx, models.CreateUserRequest{FirstName: "Durable SMTP", Email: "durable-delivery-check@example.test", Roles: []string{"ACCOUNTANT"}}, "")
 	if err != nil || status != "pending" {
 		t.Fatalf("persist invitation: %q %v", status, err)
 	}
@@ -52,7 +52,7 @@ func TestEmailOutboxRecoveryAndFencing(t *testing.T) {
 	pool := isolatedPool(t)
 	ctx := context.Background()
 	invites := repositories.NewInvitationRepository(pool)
-	u, err := invites.CreateInvitedUser(ctx, "Durable", nil, "durable@example.test", []string{"OPERATOR"}, digest("durable"), time.Now().Add(time.Hour), "", emailDraft)
+	u, err := invites.CreateInvitedUser(ctx, "Durable", nil, "durable@example.test", []string{"ACCOUNTANT"}, digest("durable"), time.Now().Add(time.Hour), "", emailDraft)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestEmailOutboxConcurrentClaims(t *testing.T) {
 	invites := repositories.NewInvitationRepository(pool)
 	for i := 0; i < 8; i++ {
 		label := fmt.Sprintf("parallel-%d", i)
-		if _, err := invites.CreateInvitedUser(ctx, label, nil, label+"@example.test", []string{"OPERATOR"}, digest(label), time.Now().Add(time.Hour), "", emailDraft); err != nil {
+		if _, err := invites.CreateInvitedUser(ctx, label, nil, label+"@example.test", []string{"ACCOUNTANT"}, digest(label), time.Now().Add(time.Hour), "", emailDraft); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -149,7 +149,7 @@ func TestEmailOutboxRetryAndStaleTokenCleanup(t *testing.T) {
 	ctx := context.Background()
 	invites := repositories.NewInvitationRepository(pool)
 	jobs := repositories.NewEmailOutboxRepository(pool)
-	u, err := invites.CreateInvitedUser(ctx, "Retry", nil, "retry@example.test", []string{"OPERATOR"}, digest("retry"), time.Now().Add(time.Hour), "", emailDraft)
+	u, err := invites.CreateInvitedUser(ctx, "Retry", nil, "retry@example.test", []string{"ACCOUNTANT"}, digest("retry"), time.Now().Add(time.Hour), "", emailDraft)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestOutboxFailureRollsBackUserAndToken(t *testing.T) {
 	 CREATE TRIGGER reject_outbox BEFORE INSERT ON email_outbox FOR EACH ROW EXECUTE FUNCTION reject_outbox()`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := invites.CreateInvitedUser(ctx, "Rollback", nil, "rollback@example.test", []string{"OPERATOR"}, digest("rollback"), time.Now().Add(time.Hour), "", emailDraft); err == nil {
+	if _, err := invites.CreateInvitedUser(ctx, "Rollback", nil, "rollback@example.test", []string{"ACCOUNTANT"}, digest("rollback"), time.Now().Add(time.Hour), "", emailDraft); err == nil {
 		t.Fatal("outbox failure reported success")
 	}
 	var users, tokens, jobs int
@@ -210,7 +210,7 @@ func TestResetEmailFailurePreservesPreviousToken(t *testing.T) {
 	pool := isolatedPool(t)
 	ctx := context.Background()
 	users := repositories.NewUserRepository(pool)
-	u, err := users.Create(ctx, "Reset", nil, "reset-durable@example.test", "fixture hash", []string{"OPERATOR"})
+	u, err := users.Create(ctx, "Reset", nil, "reset-durable@example.test", "fixture hash", []string{"ACCOUNTANT"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestEmailOutboxRejectsExpiredInactiveAndExhausted(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			pool := isolatedPool(t)
 			ctx := context.Background()
-			u, err := repositories.NewInvitationRepository(pool).CreateInvitedUser(ctx, "Stop", nil, "stop@example.test", []string{"OPERATOR"}, digest("stop"), time.Now().Add(time.Hour), "", emailDraft)
+			u, err := repositories.NewInvitationRepository(pool).CreateInvitedUser(ctx, "Stop", nil, "stop@example.test", []string{"ACCOUNTANT"}, digest("stop"), time.Now().Add(time.Hour), "", emailDraft)
 			if err != nil {
 				t.Fatal(err)
 			}

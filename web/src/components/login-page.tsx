@@ -94,12 +94,12 @@ export function LoginPage() {
 
             <IconField
               id="login-email"
-              label="Operator Corporate Email"
+              label="Corporate Email"
               icon="mail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="operator@yopmail.com"
+              placeholder="accountant@yopmail.com"
               required
               autoComplete="email"
               maxLength={254}

@@ -43,7 +43,7 @@ does not print it. The local key has already been provisioned for this workspace
 In production, supply the same key to every replica through your secret manager.
 Back it up securely and separately from the database; never regenerate it to fix
 an existing deployment. Losing/changing it makes stored authenticator secrets
-unreadable. Key rotation and controlled operator reset are separate follow-up work.
+unreadable. Key rotation and controlled administrator reset are separate follow-up work.
 
 Restart the API through `./run.ps1`. Migration 017 creates MFA state, challenge and
 recovery-code tables, adds a verified-MFA marker to sessions, extends audit actions
@@ -64,7 +64,7 @@ and revokes older password-only admin sessions. Admins must sign in again.
 Later logins ask for a fresh authenticator code or one unused recovery code after
 password/CAPTCHA verification. Recovery codes are 32 hexadecimal characters. A
 password reset does not turn off MFA or replace recovery codes. Losing both the
-authenticator and all recovery codes requires controlled operator recovery; no
+authenticator and all recovery codes requires controlled administrator recovery; no
 insecure self-service bypass is included.
 
 The challenge, enrollment secret, QR and recovery codes remain in component

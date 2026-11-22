@@ -10,10 +10,8 @@ import (
 // Standard system role codes
 const (
 	RoleAdmin             = "ADMIN"
-	RoleOperator          = "OPERATOR"
-	RoleLeadOperator      = "LEAD_OPERATOR"
+	RoleAccountant        = "ACCOUNTANT"
 	RoleComplianceAuditor = "COMPLIANCE_AUDITOR"
-	RoleStaffEngineer     = "STAFF_ENGINEER"
 )
 
 // Standard system permission codes
@@ -216,7 +214,7 @@ func (r *CreateUserRequest) Normalize() error {
 	}
 	roles, err := NormalizeRoles(r.Roles)
 	if err != nil {
-		return ErrInvalidNewUser{"Choose at least one role from ADMIN, OPERATOR, LEAD_OPERATOR, COMPLIANCE_AUDITOR and STAFF_ENGINEER."}
+		return ErrInvalidNewUser{"Choose at least one role from ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR."}
 	}
 	r.Roles = roles
 	return nil

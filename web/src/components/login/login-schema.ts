@@ -4,8 +4,8 @@ import { boolean, object, string, type InferType } from "yup";
 export const loginSchema = object({
   email: string()
     .trim()
-    .required("Please provide a valid operator email address.")
-    .email("Please provide a valid operator email address.")
+    .required("Please provide a valid email address.")
+    .email("Please provide a valid email address.")
     .max(254, "Email must be at most 254 characters."),
   password: string()
     .required("Please enter your security access key or password.")

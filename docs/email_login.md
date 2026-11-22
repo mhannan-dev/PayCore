@@ -18,12 +18,12 @@ Create a user from a separate interactive PowerShell terminal:
 
 ```powershell
 cd api
-go run ./cmd/create-user -email operator@example.test -first-name "Ledger" -last-name "Operator" -roles "OPERATOR,STAFF_ENGINEER"
+go run ./cmd/create-user -email accountant@example.test -first-name "Ledger" -last-name "Accountant" -roles "ACCOUNTANT"
 ```
 
-Omit `-last-name` to store NULL. The command prompts for a password and confirmation without echoing them. Passwords must be exactly 10 characters; bcrypt cost 12 is used. Passwords are not accepted as CLI arguments. The creator must have database access; this is an operator tool, not public registration. Duplicate emails are rejected. `-roles` takes a comma-separated list (`-role` remains an alias); values are normalized to uppercase and duplicates removed. At least one role is required. Supported roles are `OPERATOR`, `ADMIN`, legacy `LEAD_OPERATOR`, `COMPLIANCE_AUDITOR`, and `STAFF_ENGINEER`. Roles never come from login input.
+Omit `-last-name` to store NULL. The command prompts for a password and confirmation without echoing them. Passwords must be exactly 10 characters; bcrypt cost 12 is used. Passwords are not accepted as CLI arguments. The creator must have database access; this is an administrator tool, not public registration. Duplicate emails are rejected. `-roles` takes a comma-separated list (`-role` remains an alias); values are normalized to uppercase and duplicates removed. At least one role is required. Supported roles are `ADMIN`, `ACCOUNTANT` and `COMPLIANCE_AUDITOR`; migration 026 maps legacy OPERATOR to ACCOUNTANT and LEAD_OPERATOR/STAFF_ENGINEER to ADMIN. Roles never come from login input.
 
-Migration 005 changes the old scalar `role` into `roles TEXT[]`, preserving each existing value as a one-item list. Database constraints reject empty arrays, unknown roles, NULL elements and duplicates. Login and `/auth/me` return `roles`, for example `"roles": ["ADMIN", "OPERATOR"]`; the old `role` response field is removed. Sessions read current database roles on each `/me` request. `User.HasRole` checks membership; this change does not introduce public role-editing endpoints or a financial permissions policy.
+Migration 005 changes the old scalar `role` into `roles TEXT[]`, preserving each existing value as a one-item list; migration 026 then applies the three-role model. Database constraints reject empty arrays, unknown roles, NULL elements and duplicates. Login and `/auth/me` return `roles`, for example `"roles": ["ADMIN", "ACCOUNTANT"]`; the old `role` response field is removed. Sessions read current database roles on each `/me` request. `User.HasRole` checks membership; this change does not introduce public role-editing endpoints or a financial permissions policy.
 
 ## API flow
 
@@ -32,7 +32,7 @@ Migration 005 changes the old scalar `role` into `roles TEXT[]`, preserving each
 
 ```json
 {
-  "email": "operator@example.test",
+  "email": "accountant@example.test",
   "password": "<the user's password>",
   "captcha_id": "<64-character challenge ID>",
   "captcha_answer": "<six digits read from the image>"

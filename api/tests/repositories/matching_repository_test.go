@@ -17,11 +17,11 @@ func TestMatchingLifecycleAtomicityAndGlobalPostingUniqueness(t *testing.T) {
 	f := newLedgerFixture(t)
 	ctx := context.Background()
 	users := repositories.NewUserRepository(f.pool)
-	owner, err := users.Create(ctx, "Reviewer", nil, "reviewer@example.test", "fixture hash", []string{models.RoleOperator})
+	owner, err := users.Create(ctx, "Reviewer", nil, "reviewer@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := users.Create(ctx, "Other", nil, "reviewer-other@example.test", "fixture hash", []string{models.RoleOperator})
+	other, err := users.Create(ctx, "Other", nil, "reviewer-other@example.test", "fixture hash", []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}

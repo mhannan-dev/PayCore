@@ -1,9 +1,7 @@
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
-  OPERATOR: "Operator",
-  LEAD_OPERATOR: "Lead operator",
+  ACCOUNTANT: "Accountant",
   COMPLIANCE_AUDITOR: "Compliance auditor",
-  STAFF_ENGINEER: "Staff engineer",
 };
 
 /** Human-readable name for a role code, e.g. COMPLIANCE_AUDITOR → "Compliance auditor". */

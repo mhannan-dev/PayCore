@@ -150,3 +150,5 @@ The console uses the existing authenticated `useApi`, RBAC and pagination primit
 - `npm run check` runs TypeScript and type-aware ESLint, including exhaustive switch and React Compiler rules.
 - Backend checks and worker configuration are documented in [API.md](API.md) and [SECURITY.md](SECURITY.md).
 - For the click-through script, see [DEMO.md](DEMO.md). For the future agent-spending design, see [AGENT_MANDATE.md](AGENT_MANDATE.md).
+
+Part D adds a separate, noncustodial smart-contract checkout and mandate implementation under `contracts/`; it is not wired into the P0 API or browser flow. See [CONTRACTS.md](CONTRACTS.md) for the contract design, Shanghai/Aevum verification, tests, gas report and deployment procedure.

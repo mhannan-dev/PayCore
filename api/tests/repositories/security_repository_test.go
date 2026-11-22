@@ -269,7 +269,7 @@ func TestSecurityPasswordOnlyAccountAndRevokedCurrentSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, err := users.Create(ctx, "Ordinary", nil, "ordinary-security@example.test", hash, []string{models.RoleOperator})
+	u, err := users.Create(ctx, "Ordinary", nil, "ordinary-security@example.test", hash, []string{models.RoleAccountant})
 	if err != nil {
 		t.Fatal(err)
 	}

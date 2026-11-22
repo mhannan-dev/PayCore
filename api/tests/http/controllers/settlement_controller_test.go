@@ -42,7 +42,7 @@ func (s *settlementTransport) Release(ctx context.Context, actor models.UserDTO,
 }
 
 func TestSettlementTransport(t *testing.T) {
-	caller := models.User{ID: adminID, Email: "operator@example.test", IsActive: true, Permissions: []string{models.PermTransfersRead, models.PermTransfersCreate, models.PermTransfersReverse}}
+	caller := models.User{ID: adminID, Email: "accountant@example.test", IsActive: true, Permissions: []string{models.PermTransfersRead, models.PermTransfersCreate, models.PermTransfersReverse}}
 	auth, token := sessionAuth(t, caller)
 	svc := &settlementTransport{}
 	r := &testRouter{server.New(nil, server.Controllers{Settlement: controllers.NewSettlementController(svc), AuthMiddleware: middleware.NewAuth(auth)})}

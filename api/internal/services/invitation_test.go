@@ -46,7 +46,7 @@ func TestInvitationPersistsRenderedEmail(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		store := &invitationDeliveryStore{}
 		svc := NewInvitationService(store, enabled, "http://web.test/")
-		_, status, err := svc.Invite(context.Background(), models.CreateUserRequest{FirstName: "Mina", Email: "mina@example.test", Roles: []string{"OPERATOR"}}, "")
+		_, status, err := svc.Invite(context.Background(), models.CreateUserRequest{FirstName: "Mina", Email: "mina@example.test", Roles: []string{"ACCOUNTANT"}}, "")
 		if err != nil {
 			t.Fatal(err)
 		}

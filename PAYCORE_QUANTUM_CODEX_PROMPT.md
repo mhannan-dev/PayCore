@@ -6,8 +6,10 @@ Two agents work in parallel on the existing branch `PayCore-Quantum`:
 | --- | --- | --- |
 | **Codex** | backend (`api/`), `.env.example`, `docs/quantum/API.md`, `docs/quantum/SECURITY.md` | Part B |
 | **opencode** | frontend (`web/`), `docs/quantum/ARCHITECTURE.md`, `DEMO.md`, `AGENT_MANDATE.md`, the README Quantum section | Part C |
+| **opencode (round 2)** | smart contracts (`contracts/`), `docs/quantum/CONTRACTS.md` | Part D |
+| **Codex + opencode (round 3)** | review fixes: F1 API, F2–F5 = Codex; F1 web = opencode | Part F |
 
-Each agent reads **Part A** (shared rules and the API contract) and then **only its own part**.
+Each agent reads **Part A** (shared rules and the API contract) and then **only its own part**. Before Part D, opencode also reads `PAYCORE_QUANTUM_QDAY_VERIFICATION.md`.
 
 ---
 
@@ -322,3 +324,246 @@ List:
 - what remains unverified (QDay chain ID, RPC, token address, decimals, native account primitives).
 
 Paste the output of your checks. Do not claim a live testnet payment unless you made one and include the explorer link.
+
+---
+
+## Part D: opencode, round 2 (smart contracts)
+
+**Why:** judging counts "smart contracts on Aevum Testnet" and on-chain activity, and the biggest criterion is innovation (20 points). Plain `transfer()` has no contract of our own and gives the backend no reliable way to tie a payment to an invoice. This part adds one contract, `QuantumPayments`, that covers both:
+- **invoice payment**, emitting an `orderId`-bound event;
+- **Agent Spend Mandates**, with on-chain caps, expiry and instant revoke. This is the innovation point.
+
+Write it as a **standalone Foundry project in `contracts/`**. It must not import anything from `api/` or `web/`, so it can move to a new repo unchanged if the organizers require one. **Do not touch `api/` or `web/` in this part.** The backend and frontend integration comes later as Part E, after the contract is deployed.
+
+### D1. Read first
+
+- `PAYCORE_QUANTUM_QDAY_VERIFICATION.md`, all of it, especially §2 (Shanghai EVM, legacy transactions, no WebSocket, the token is a USDC-style proxy with EIP-3009).
+- The official starter kit https://github.com/qday-io/aevum-starter-kit (MIT), especially `contracts/src/Checkout.sol` and its tests. **Learn its patterns, don't copy it wholesale.** If you copy any snippet, add a comment above it with the source repo, author and MIT license, as the challenge rules require.
+- `docs/quantum/AGENT_MANDATE.md` (your own design doc). Update it if the contract differs.
+
+### D2. Toolchain
+
+- Use Foundry. Install it with `foundryup` if `forge` is missing, and report the version.
+- Use Solidity `0.8.24` with **`evm_version = "shanghai"`** in `foundry.toml`. Cancun opcodes (`MCOPY`, `TSTORE`) revert on Aevum.
+- Use OpenZeppelin Contracts **v5.0.2**, pinned. Use only `SafeERC20`, `IERC20` and `ReentrancyGuard` (the storage-based one, not the transient one).
+- Prove with a test that the compiled bytecode contains no Cancun opcodes. A fork test against Aevum with `--evm-version shanghai` is enough.
+- Add a `Makefile` with these targets: `build`, `test`, `fmt`, `fork-test` (uses https://rpc-test.qday.info) and `deploy-aevum`.
+
+### D3. Contract: `contracts/src/QuantumPayments.sol`
+
+- Immutable `token` (tUSD8 is `0x456569838f1d43009A91ebA4263147Afd7233483` on Aevum, passed to the constructor).
+- **No owner, no admin, no upgradeability, no pause, and no funds held between calls.** Every payment moves tokens payer → merchant within one transaction.
+
+**One event for every payment path**, so the backend watches a single event:
+
+```solidity
+event InvoicePaid(bytes32 indexed orderId, address indexed payer, address indexed merchant,
+                  uint256 amount, bytes32 mandateId); // mandateId == 0 for direct payments
+```
+
+`mapping(bytes32 => bool) public paid;`: each `orderId` can be paid **once**, whichever path pays it. A second payment reverts with `AlreadyPaid`.
+
+The backend derives `orderId` as `keccak256(abi.encodePacked("paycore-quantum:", invoiceUUID))`; document this in `CONTRACTS.md`. The contract treats `orderId` as opaque. It must reject `orderId == 0`, `merchant == address(0)` and `amount == 0`.
+
+**Path 1: direct payment** (approve, then pay):
+- `pay(bytes32 orderId, address merchant, uint256 amount)` calls `safeTransferFrom(msg.sender, merchant, amount)`.
+
+**Path 2: gasless payment through EIP-3009** (the payer signs; anyone can relay):
+- `payWithAuthorization(bytes32 orderId, address payer, address merchant, uint256 amount, uint256 validAfter, uint256 validBefore, uint8 v, bytes32 r, bytes32 s)` calls `token.receiveWithAuthorization(payer, address(this), amount, validAfter, validBefore, nonce, v, r, s)` and then `safeTransfer(merchant, amount)`.
+- **Binding:** the EIP-3009 `nonce` must equal `keccak256(abi.encode(block.chainid, address(this), orderId, merchant, amount))`. The contract computes the nonce itself, so a relayer cannot redirect the payment to another merchant, amount or invoice. Test this explicitly.
+- Use `receiveWithAuthorization`, not `transferWithAuthorization`: it requires `msg.sender == to`, which prevents front-running.
+- Assert that the contract's balance after forwarding equals its balance before.
+
+**Path 3: Agent Spend Mandate** (owner → agent, with limits):
+
+```solidity
+struct Mandate {
+    address owner;          // the payer whose tokens are spent (must have approved this contract)
+    address agent;          // the only address allowed to spend under this mandate
+    uint128 perTxCap;       // max per payment
+    uint128 dailyCap;       // max per UTC day (block.timestamp / 1 days)
+    uint64  expiresAt;      // unix seconds; must be in the future at creation
+    bool    revoked;
+    uint128 spentToday;
+    uint64  day;
+}
+```
+
+- `createMandate(address agent, uint128 perTxCap, uint128 dailyCap, uint64 expiresAt, address[] calldata merchants) returns (bytes32 mandateId)`.
+  - `msg.sender` becomes the owner.
+  - `mandateId = keccak256(abi.encode(block.chainid, address(this), msg.sender, agent, ownerNonce[msg.sender]++))`.
+  - The merchant allowlist is stored as `mapping(bytes32 => mapping(address => bool))`, and the list must not be empty. Cap it at 20 merchants.
+  - Require `0 < perTxCap <= dailyCap` and `agent != owner`.
+- `revokeMandate(bytes32 mandateId)`: owner only, takes effect immediately, and cannot be undone. Emits `MandateRevoked`.
+- `agentPay(bytes32 mandateId, bytes32 orderId, address merchant, uint256 amount)`:
+  - Only `mandate.agent` may call it.
+  - It requires: not revoked, not expired, merchant allowlisted, `amount <= perTxCap`, and the daily spend after this payment `<= dailyCap`. Reset `spentToday` when the day changes.
+  - It then pulls `safeTransferFrom(owner, merchant, amount)` and emits `InvoicePaid` with the `mandateId`.
+- **Human approval above the cap:**
+  - `requestApproval(mandateId, orderId, merchant, amount) returns (bytes32 requestId)` is agent-only. It requires that the mandate is not revoked or expired and the merchant is allowlisted. It is meant for amounts above `perTxCap` or beyond the daily cap.
+  - It stores a pending request and emits `ApprovalRequested`.
+  - `approveRequest(requestId)` is owner-only and executes the payment, bypassing the caps. State in `CONTRACTS.md` whether approved payments count toward daily spend.
+  - `rejectRequest(requestId)` is owner-only.
+  - A request cannot be approved after its mandate is revoked or expired.
+- Events: `MandateCreated`, `MandateRevoked`, `ApprovalRequested`, `ApprovalResolved`, plus `InvoicePaid`.
+- Use **custom errors**, not revert strings: `AlreadyPaid`, `NotAgent`, `NotOwner`, `MandateIsRevoked`, `MandateExpired`, `MerchantNotAllowed`, `PerTxCapExceeded`, `DailyCapExceeded`, `InvalidArgument`, `RequestNotPending`.
+- Follow checks-effects-interactions: mark `paid[orderId] = true` and update spend **before** the token call. Apply `nonReentrant` to every external function that moves tokens.
+- Add NatSpec to every external function.
+
+**Prompt-injection model:** state it in `CONTRACTS.md`. Whatever an AI agent is tricked into doing, it cannot exceed the on-chain caps, pay a merchant outside the allowlist, or act after revoke or expiry, because the contract enforces all of these, not the agent's prompt.
+
+### D4. Tests (`contracts/test/`)
+
+- **Unit tests** with a local mock token (EIP-3009 + permit; you may adapt the kit's `MockUSD8`, with credit). They must cover:
+  - each path pays the merchant exactly once;
+  - a second payment of the same `orderId` through any path reverts;
+  - zero and invalid arguments revert;
+  - an EIP-3009 signature for another merchant, amount or `orderId` reverts;
+  - a reused authorization reverts;
+  - mandate: a call from anyone other than the agent reverts;
+  - per-transaction cap, daily cap, and the daily reset after `vm.warp(+1 days)`;
+  - expiry, revoke (including revoke taking effect between two agent payments), and a merchant outside the allowlist;
+  - approval request → approve and → reject, and approval after revoke or expiry;
+  - the owner's allowance or balance being too low;
+  - the contract holds no tokens after any test.
+- **Fuzz tests:** for random amounts and timestamps, the agent's total spend per day is never above `dailyCap`.
+- **Invariant test:** the contract's token balance is always 0.
+- **Fork test** (`test/fork/`, run via `make fork-test`, skipped by default in `forge test`):
+  - against the real tUSD8 at https://rpc-test.qday.info;
+  - use `deal` or impersonate a holder only on the fork; **never broadcast**;
+  - prove the real `receiveWithAuthorization` works with the EIP-712 domain name `tUSD8`, version `2`.
+
+### D5. Deployment script (the human deploys; you do not)
+
+- `contracts/script/Deploy.s.sol` deploys `QuantumPayments(tUSD8)` and logs the address.
+- `make deploy-aevum ACCOUNT=<foundry-keystore-name>` uses `--legacy --broadcast --rpc-url https://rpc-test.qday.info` and a **Foundry keystore** (`cast wallet import`).
+- **Never** put a private key in `.env`, in command arguments or in files. **Do not run the broadcast yourself.** The user deploys with their own funded wallet.
+- Explorer verification is broken, so `CONTRACTS.md` gets a placeholder table for the deployed address, the deploy tx hash and the exact commit. The user fills it in.
+
+### D6. Documentation: `docs/quantum/CONTRACTS.md`
+
+Cover:
+- the purpose;
+- a Mermaid sequence diagram for each of the three paths;
+- the function reference;
+- the `orderId` derivation;
+- the EIP-3009 nonce binding;
+- the mandate rules;
+- the threat model (front-running, replay, redirection, reentrancy, prompt injection, compromised agent key → revoke, compromised owner key = out of scope);
+- known limits (no upgrade, no refunds, `paid` is permanent, the token itself is an upgradeable proxy controlled by QDay);
+- how to run the tests and the fork test;
+- the deploy steps and the address table.
+
+Also add one paragraph and a link to this file in `ARCHITECTURE.md` and `AGENT_MANDATE.md`.
+
+### D7. Not in this part
+
+- Backend changes, such as verifying `InvoicePaid` in the Go worker or adding `contract_address` to `/config`. Those come in **Part E** after deployment. List what Part E needs in your report: the A3 fields to add and the event ABI.
+- Frontend changes to call the contract.
+- A relayer service for gasless payments.
+- Any broadcast to the testnet.
+
+### D8. Done
+
+- `cd contracts; forge fmt --check; forge build; forge test -vv` passes with **no warnings**.
+- `make fork-test` passes (or report the exact RPC error if the network is down).
+- The Shanghai check is proven.
+- Commit only `contracts/**` and `docs/quantum/CONTRACTS.md` (plus the one-paragraph links in your own docs). Suggested commits:
+  1. `feat(contracts): QuantumPayments with direct and EIP-3009 invoice payments`
+  2. `feat(contracts): agent spend mandates with caps, expiry, revoke and approvals`
+  3. `test(contracts): unit, fuzz, invariant and Aevum fork tests`
+  4. `docs(quantum): contract reference and threat model`
+
+For forge dependencies, either git-ignore `contracts/lib/` with a documented install step, or use git submodules as the starter kit does. Say which you chose.
+
+**Report:**
+- the Foundry and solc versions;
+- the gas cost of each function from `forge test --gas-report`;
+- the test count;
+- any deviation from D3 and why;
+- the exact `make deploy-aevum` command the user must run;
+- the Part E checklist.
+
+---
+
+## Part F: review fixes for P0 (commit `104484e`)
+
+A review of P0 found the issues below. All checks currently pass: `go vet`, `go test` including the PostgreSQL repository tests, golangci-lint with 0 issues, `npm run check`, and 31/31 web tests. Fix each issue with a **regression test that fails before the fix**. Keep the existing ownership: **F1 web = opencode; F1 API, F2, F3, F4 = Codex.** F1 needs both: Codex lands the API part first, then opencode.
+
+### F1. 🔴 Lost tx hash can cause a double payment (Codex + opencode)
+
+**Bug:** in `web/src/components/quantum/wallet/checkout-flow.tsx` (`pay()`, around lines 121–131), the wallet broadcasts the transfer, and then `submitCheckoutTx` fails (network error, `429`, tab closed). The hash is lost. When the payer clicks Pay again, `RegisterAttempt` returns the same `CREATED` attempt (`quantum_repository.go` around lines 241–246), and the payer sends a **second** transfer. The first transfer has no record, and its `CREATED` attempt is deleted after 15 minutes.
+
+**Codex (API):**
+- Never delete a `CREATED` attempt that might have a broadcast pending without a trace. Change the 15-minute cleanup so it no longer silently drops `CREATED` attempts: expire them to `FAILED` with a new failure code `abandoned`, which keeps the row. Add `abandoned` to the Go const, `Valid()`, the SQL `CHECK` (new migration `026_quantum_review_fixes.sql`; **never edit 025**), and the A3 `FailureCode` list in this file.
+- Make `POST /checkout/:token/attempts/:id/tx` safely repeatable:
+  - the same hash for the same attempt → `202` with the current attempt (idempotent);
+  - a different hash for an attempt that already has one → `409 tx_already_submitted` (unchanged).
+- Add a recovery endpoint: `POST /checkout/:token/recover` with body `{payer_address, tx_hash}`, public and rate limited.
+  - If the invoice is `PENDING` or recently `EXPIRED`, and no attempt or claim already has that hash, create an attempt in `BROADCAST` with that hash and the payer, and return `202 Attempt`.
+  - The verifier then applies all the normal checks, including `from == payer` and the exact amount.
+  - A hash already used by another invoice gives `409 tx_already_submitted`.
+  - Add it to A3 and `docs/quantum/API.md`.
+- Tests:
+  - repeating a submit with the same hash is idempotent;
+  - recovery creates a verifiable attempt;
+  - recovery with a hash already claimed elsewhere is rejected;
+  - an abandoned attempt keeps its row.
+
+**opencode (web):**
+- **Immediately** after `writeContractAsync` returns, before any network call, save `{attempt_id, tx_hash, payer}` to `sessionStorage` under a key derived from the checkout token. Wrap storage access in try/catch, and parse it back as `unknown` with a type guard (coding rule 7).
+- Submit with retry: 3 attempts with backoff (1 s, 3 s, 9 s). If all fail, show "Payment sent but not yet registered" with a **Retry registration** button and the explorer link. **Never show the Pay button again while a saved, unregistered hash exists.**
+- On page load, if a saved hash exists, resume: call submit again (it is idempotent), or `recover` if the attempt is gone, then poll.
+- Clear the saved entry only once the backend reports that the attempt has that `tx_hash`.
+- Add a manual "I already paid. Paste transaction hash" link that calls `recover`.
+- Tests in `web/tests/quantum.test.mjs` cover the saved-hash type guard and the resume decision. Extract the decision into a pure function in `web/src/lib/`, so it can be tested without React.
+
+### F2. 🟠 One flaky RPC answer can flip PAID back to PENDING (Codex)
+
+**Bug:** `api/internal/services/quantum.go` around line 168. The re-check of `CONFIRMED` attempts treats any `!Found`, `!Canonical` or `Confirmations < minimum` as a reorg. A single empty receipt or a lagging RPC node therefore flips the invoice to `PENDING`, writes an audit event, and emits `quantum.invoice.reorged` followed later by `quantum.invoice.paid` again: flapping webhooks. Aevum is a single-sequencer zk validium, so real reorgs are rare.
+
+**Fix:**
+- **Positive evidence** is enough to declare a reorg at once: the receipt is found with a different block hash, or the canonical header at that height has a different hash, or a log is marked `Removed`.
+- **Absence** (`!Found`, RPC error, lower head) never reorgs at once. It increments a `reorg_suspicions` counter on the attempt (migration 026) and reschedules. Declare a reorg only after **5 consecutive** negative checks spread over at least 60 s, and reset the counter on any positive check.
+- A lower head than before (`Confirmations` decreasing) is a lagging node: retry, never reorg.
+- Stop re-checking `CONFIRMED` attempts once they have passed `max(min_confirmations, 64)` confirmations and are older than 10 minutes, instead of re-polling for 24 hours.
+- Tests:
+  - one missing receipt → still `CONFIRMED`, no audit event, no outbox event;
+  - 5 consecutive missing receipts → `REORGED`;
+  - a different block hash → immediate `REORGED`;
+  - a lower head → no change.
+
+### F3. 🟠 Rate limiter can lock out all checkouts (Codex)
+
+**Bug:** `api/internal/http/middleware/quantum_rate_limit.go`. When 4096 distinct keys exist, **every new** client gets `429`, so anyone with many IPs (or one IPv6 /64) can block all checkouts. The map is also scanned in full on every request while holding the lock. And because of `SetTrustedProxies(nil)` in `server/router.go`, all users share the proxy's IP behind a reverse proxy, so the whole demo gets 20 writes per minute in total.
+
+**Fix:**
+- When the table is full, evict the oldest entries; never reject new clients just because the table is full. Bound the memory and sweep expired entries at most once per second, not on every request.
+- Key IPv6 clients by their /64 prefix.
+- Add the config `TRUSTED_PROXIES` (a comma-separated list of CIDRs; empty means none, which keeps today's behaviour) and pass it to `SetTrustedProxies`. Document it in `.env.example` and `docs/quantum/SECURITY.md`, including what to set behind the demo host.
+- Also cap open attempts per invoice in the database. This already exists; keep it.
+- Tests:
+  - a full table still admits a new client;
+  - IPv6 addresses in the same /64 share one bucket;
+  - with a trusted proxy configured, `X-Forwarded-For` is honoured; without one, it is ignored.
+
+### F4. 🟡 Clock skew can mark a valid payment late (Codex)
+
+**Bug:** `api/internal/services/quantum.go` around line 224 rejects a payment as `late_payment` when `BlockTime < attempt.CreatedAt`. `CreatedAt` comes from the database clock and `BlockTime` from the chain, so a server clock a few seconds fast turns a valid, fast (~1 s block) payment into `REVIEW_REQUIRED`.
+
+**Fix:**
+- Allow a skew of `QUANTUM_CLOCK_SKEW` (default `60s`, max `5m`) on the lower bound: `BlockTime < CreatedAt - skew` is the pre-attempt case.
+- Keep the expiry check strict, using the block time against `expires_at`.
+- Document the trade-off in `SECURITY.md`: an exact-amount transfer from the same payer within the skew window before the attempt could be attributed to it.
+- Test that a block 30 s before the attempt passes and one 2 min before is late.
+
+### F5. Prepare for Part E (Codex, design only)
+
+Do **not** implement it yet. The verifier currently requires `tx.To == token` and `tx.From == payer` (`quantum.go` around lines 190 and 202), so payments made through the `QuantumPayments` contract, gasless relays or agent mandates would all be rejected. In your report, describe the change needed to verify by the `InvoicePaid(orderId, payer, merchant, amount, mandateId)` event from the configured contract address instead. Keep the current direct-transfer path for backward compatibility.
+
+### F6. Done
+
+- **Codex:** `cd api; go vet ./...; go test ./...; golangci-lint run` passes (with `DATABASE_TEST_URL`). Commit as `fix(quantum): …`, one commit per F item.
+- **opencode:** `cd web; npm run check; npm test` passes. Commit as `fix(web): recover lost checkout tx hash`.
+- Each agent reports: the fixed items, the new tests, the A3 contract changes (Codex edits A3 in this file in the same commit), and anything skipped.
+- Housekeeping for opencode's contracts: make sure `contracts/out/`, `contracts/cache/` and `contracts/broadcast/` are git-ignored and never committed.
