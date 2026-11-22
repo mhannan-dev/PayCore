@@ -10,6 +10,7 @@ export const NAVIGATION: NavItem[] = [
   { href: "/reports", label: "Reports", icon: "chart" },
   { href: "/notifications", label: "Notifications", icon: "bell" },
   { href: "/settlements", label: "Settlements", icon: "bank" },
+  { href: "/quantum", label: "Quantum Payments", icon: "wallet" },
   { href: "/simulator", label: "Request simulator", icon: "code" },
   { href: "/security", label: "Account security", icon: "shield" },
   { href: "/admin/users", label: "Users & access", icon: "users", section: "admin" },

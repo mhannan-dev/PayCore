@@ -2,7 +2,7 @@
 
 import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/auth-session";
 import { Sidebar } from "./sidebar";
 import { DemoBanner, PageFooter, Topbar } from "./topbar";
@@ -12,6 +12,12 @@ import { useSessionSync } from "./use-session-sync";
 const PUBLIC_PATHS = new Set(["/login", "/set-password", "/forgot-password", "/reset-password"]);
 
 export function AppShell({ children }: { children: ReactNode }) {
+  // Dynamic checkout tokens make the pathname request-specific. Keep the route
+  // content available while the shell waits for it during prerendering.
+  return <Suspense fallback={children}><ResolvedAppShell>{children}</ResolvedAppShell></Suspense>;
+}
+
+function ResolvedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { currency } = useWorkspaceCurrency();
   const { session } = useAuthSession();
@@ -20,7 +26,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Auth guards live inside the pages so layouts never drop route segments.
   // /set-password is public: an invited user (or anyone signed in on this browser) sees just the form.
-  if (PUBLIC_PATHS.has(pathname) || session.status === "loading" || !session.signedIn) return <>{children}</>;
+  const isPublic = PUBLIC_PATHS.has(pathname) || pathname === "/pay" || pathname.startsWith("/pay/");
+  if (isPublic || session.status === "loading" || !session.signedIn) return <>{children}</>;
 
   return (
     <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>

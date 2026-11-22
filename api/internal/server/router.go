@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"paycore/api/internal/audit"
 	"paycore/api/internal/http/controllers"
 	"paycore/api/internal/http/middleware"
@@ -37,7 +39,8 @@ func New(db DatabasePinger, h Controllers) *gin.Engine {
 		middleware.AccessLog(),
 	)
 	// Panics are logged by gin and answered with the standard JSON error envelope.
-	stack.Use(gin.CustomRecovery(func(c *gin.Context, _ any) {
+	stack.Use(gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, _ any) {
+		slog.ErrorContext(c.Request.Context(), "request_panicked", "request_id", middleware.RequestIDFrom(c))
 		c.Abort()
 		responses.InternalError(c)
 	}))
@@ -75,6 +78,9 @@ func New(db DatabasePinger, h Controllers) *gin.Engine {
 	}
 	if h.Audit == nil {
 		h.Audit = controllers.NewAuditController(nil)
+	}
+	if h.Quantum == nil {
+		h.Quantum = controllers.NewQuantumController(nil)
 	}
 	if h.Ledger == nil {
 		h.Ledger = controllers.NewLedgerController(nil)

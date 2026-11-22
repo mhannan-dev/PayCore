@@ -28,6 +28,7 @@ PayCore is a learning-grade but production-minded fintech core: an append-only d
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
 - [Usage](#usage)
+- [PayCore Quantum (testnet)](#paycore-quantum-testnet)
 - [Development](#development)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -35,7 +36,7 @@ PayCore is a learning-grade but production-minded fintech core: an append-only d
 
 ## Project status
 
-PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core** (accounts, transfers, reversals, zero-sum audit, transactional outbox relay) is implemented and drives the Accounts, Transfer studio, Ledger explorer, Invariant audit, Event outbox and live Idempotency sandbox pages; Overview and Reports now read the API, and Settlements now supports live sandbox payout reservation, capture and release. The Delivery Center now shows live sandbox notification receipts and retries from the transactional outbox; no external notification emails or webhooks are sent. See [sandbox notifications](docs/notifications.md). See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
+PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core** (accounts, transfers, reversals, zero-sum audit, transactional outbox relay) is implemented and drives the Accounts, Transfer studio, Ledger explorer, Invariant audit, Event outbox and live Idempotency sandbox pages; Overview and Reports now read the API, and Settlements now supports live sandbox payout reservation, capture and release. The Delivery Center now shows live sandbox notification receipts and retries from the transactional outbox; no external notification emails or webhooks are sent. See [sandbox notifications](docs/notifications.md). The [PayCore Quantum](#paycore-quantum-testnet) testnet checkout adds a merchant invoice console, a public wallet checkout and backend-authoritative ERC-20 payment verification; it remains separate from the accounting ledger. See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
 
 **Do not use PayCore to move real money.**
 
@@ -249,6 +250,44 @@ Full endpoint references: [authentication](docs/email_login.md), [RBAC, users, i
 
 > **Live demo:** *coming soon.*
 
+## PayCore Quantum (testnet)
+
+**PayCore Quantum** is a noncustodial, testnet-only ERC-20 checkout flow. A signed-in merchant creates an invoice in `/quantum`, shares its public checkout link, and the customer pays from an injected wallet on QDay Aevum testnet. The browser submits a transaction hash, but PayCore shows **PAID** only after its chain worker verifies the canonical tUSD8 transfer and the API reads that state from the database. It is separate from the accounting ledger; P0 has no webhooks, mandates or automatic refunds.
+
+> **TESTNET ONLY · tUSD8 has no real value.** Do not use a mainnet wallet or real funds.
+
+### Configuration
+
+Copy [`api/.env.example`](api/.env.example) to `api/.env`. `QUANTUM_ENABLED` defaults to `false`; when enabled, the remaining `QUANTUM_*` variables are required. See [the API contract](docs/quantum/API.md#configuration-and-readiness) for meanings and the validated example values. The frontend reads chain and token metadata from `GET /api/v1/quantum/config`; it has no hardcoded chain ID, RPC URL or token address.
+
+| Variable | Purpose |
+| --- | --- |
+| `QUANTUM_ENABLED` | Testnet feature opt-in |
+| `QUANTUM_CHAIN_ID`, `QUANTUM_RPC_URL` | Expected chain and trusted HTTP(S) RPC endpoint |
+| `QUANTUM_TOKEN_ADDRESS`, `QUANTUM_TOKEN_DECIMALS` | Allowed tUSD8 contract and precision |
+| `QUANTUM_MIN_CONFIRMATIONS` | Demo confirmation policy |
+| `QUANTUM_EXPLORER_URL`, `QUANTUM_CHECKOUT_BASE_URL` | Public explorer and checkout links |
+| `QUANTUM_WEBHOOK_SIGNING_KEY` | Reserved for future use; unused by P0 |
+
+Reverify chain parameters, token details and faucet instructions from the [official QDay faucet](https://wiki.qday.info/guide/start/faucet) before a demonstration. The faucet is the only source of testnet tUSD8 and gas; PayCore never funds wallets or signs transactions.
+
+### Run the flow
+
+1. Start PayCore as described in [Getting started](#getting-started) and make sure the chain worker is running.
+2. Set `QUANTUM_ENABLED=true` and the other `QUANTUM_*` values, then restart the API.
+3. Sign in with a user that has `quantum:read` and `quantum:write`, and open **Quantum Payments**.
+4. Create or confirm the merchant profile, then create an invoice and copy its checkout link.
+5. Open the checkout link in a separate signed-out browser profile, connect a funded testnet wallet, switch network and pay.
+6. Wait for the backend status to become **PAID** and open the explorer link. A failed or mismatched transfer becomes a review case; do not send a second transfer.
+
+### Learn more
+
+- [Architecture and flow diagrams](docs/quantum/ARCHITECTURE.md)
+- [API contract](docs/quantum/API.md)
+- [Security and threat model](docs/quantum/SECURITY.md)
+- [3–5 minute demo script](docs/quantum/DEMO.md)
+- [Agent spend mandates — design proposal](docs/quantum/AGENT_MANDATE.md)
+
 ## Development
 
 Run all tests and required checks from the repository root with `./test.ps1`. Public Go tests live in `api/tests/`, frontend tests in `web/tests/`, and private Go unit tests beside their packages. See [Testing](docs/testing.md) for individual suites and database integration setup.
@@ -281,6 +320,7 @@ All changes follow the [coding rules](docs/coding_rules.md): type safety, thin c
 | API responses and errors | [docs/api_responses.md](docs/api_responses.md) |
 | Seeding and administrators | [docs/user_seeder.md](docs/user_seeder.md), [docs/system_admin.md](docs/system_admin.md) |
 | Microservices architecture (Bengali) | [docs/microservices_architecture_bn.md](docs/microservices_architecture_bn.md) |
+| Quantum payments (testnet) | [docs/quantum/ARCHITECTURE.md](docs/quantum/ARCHITECTURE.md), [API.md](docs/quantum/API.md), [SECURITY.md](docs/quantum/SECURITY.md), [DEMO.md](docs/quantum/DEMO.md), [AGENT_MANDATE.md](docs/quantum/AGENT_MANDATE.md) |
 
 ## Contributing
 

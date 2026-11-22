@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"paycore/api/database/migrations"
+	"paycore/api/internal/blockchain"
 	"paycore/api/internal/config"
 	"paycore/api/internal/database"
 	"paycore/api/internal/helpers"
@@ -42,6 +43,8 @@ func main() {
 	var emailDone chan struct{}
 	var outboxCancel context.CancelFunc
 	var outboxDone chan struct{}
+	var quantumCancel context.CancelFunc
+	var quantumDone chan struct{}
 	if !*listRoutes {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := database.Open(ctx, cfg.DatabaseURL)
@@ -113,6 +116,23 @@ func main() {
 		resets := services.NewPasswordResetService(repositories.NewPasswordResetRepository(pool), challenges, mail != nil, cfg.AppURL)
 		resets.Audit = auditLog
 		registeredControllers.PasswordResets = controllers.NewPasswordResetController(resets)
+		if cfg.Quantum.Public.Enabled {
+			chainCtx, chainCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			chain, chainErr := blockchain.Open(chainCtx, cfg.Quantum.RPCURL, cfg.Quantum.Public)
+			chainCancel()
+			if chainErr != nil {
+				slog.Warn("quantum_unavailable", "reason", chainErr.Error())
+			} else {
+				defer chain.Close()
+				quantumRepo := repositories.NewQuantumRepository(pool)
+				registeredControllers.Quantum = controllers.NewQuantumController(services.NewQuantumService(quantumRepo, cfg.Quantum.Public, cfg.Quantum.CheckoutBaseURL))
+				worker := services.NewQuantumVerifierWorker(quantumRepo, chain, cfg.Quantum.Public.MinConfirmations)
+				workerCtx, cancel := context.WithCancel(context.Background())
+				quantumCancel = cancel
+				quantumDone = make(chan struct{})
+				go func() { defer close(quantumDone); worker.Run(workerCtx) }()
+			}
+		}
 		ledgerService := services.NewLedgerService(repositories.NewLedgerRepository(pool))
 		registeredControllers.Ledger = controllers.NewLedgerController(ledgerService)
 		settlementService := services.NewSettlementService(repositories.NewSettlementRepository(pool))
@@ -204,6 +224,13 @@ func main() {
 		select {
 		case <-outboxDone:
 		case <-time.After(5 * time.Second):
+		}
+	}
+	if quantumCancel != nil {
+		quantumCancel()
+		select {
+		case <-quantumDone:
+		case <-time.After(15 * time.Second):
 		}
 	}
 	if shutdownErr != nil {

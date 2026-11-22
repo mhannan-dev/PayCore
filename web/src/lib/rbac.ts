@@ -23,6 +23,8 @@ export const PERMISSIONS = {
   attachmentsRead: "attachments:read",
   attachmentsWrite: "attachments:write",
   attachmentsDelete: "attachments:delete",
+  quantumRead: "quantum:read",
+  quantumWrite: "quantum:write",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -44,6 +46,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   "/admin/roles": PERMISSIONS.usersRead,
   "/admin/audit-log": PERMISSIONS.auditRead,
   "/system/outbox": PERMISSIONS.systemRead,
+  "/quantum": PERMISSIONS.quantumRead,
 };
 
 /**
@@ -84,6 +87,7 @@ const PERMISSION_GROUP_LABELS: Record<string, string> = {
   system: "System",
   attachments: "Own attachments",
   accounts: "Accounts",
+  quantum: "Quantum payments",
 };
 
 /** "transfers:create" → "Transfers"; used to group permissions in the matrix. */

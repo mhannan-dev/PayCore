@@ -35,8 +35,8 @@ func (r *OutboxRepository) Claim(ctx context.Context, batchSize int, lease time.
 	rows, err := r.pool.Query(ctx, `
 		WITH due AS (
 			SELECT id FROM outbox_events
-			WHERE (status = 'PENDING' AND available_at <= NOW())
-			   OR (status = 'SENDING' AND lease_until <= NOW())
+			WHERE aggregate_type <> 'QUANTUM_INVOICE' AND ((status = 'PENDING' AND available_at <= NOW())
+			   OR (status = 'SENDING' AND lease_until <= NOW()))
 			ORDER BY available_at, created_at
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED
@@ -127,7 +127,7 @@ func (r *OutboxRepository) GetMetrics(ctx context.Context) (models.OutboxMetrics
 			COUNT(*) FILTER (WHERE status = 'PUBLISHED'),
 			COUNT(*) FILTER (WHERE status = 'FAILED'),
 			COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at) FILTER (WHERE status = 'PENDING')))::double precision, 0)
-		FROM outbox_events
+		FROM outbox_events WHERE aggregate_type <> 'QUANTUM_INVOICE'
 	`).Scan(&m.PendingCount, &m.SendingCount, &m.PublishedCount, &m.FailedCount, &lag)
 	if err != nil {
 		return m, err
@@ -150,14 +150,14 @@ func (r *OutboxRepository) ReplayFailed(ctx context.Context, ids ...string) (int
 			UPDATE outbox_events
 			SET status = 'PENDING', retry_count = 0, available_at = NOW(),
 			    last_error = NULL, lease_id = NULL, lease_until = NULL
-			WHERE status = 'FAILED' AND id = ANY($1)
+			WHERE aggregate_type <> 'QUANTUM_INVOICE' AND status = 'FAILED' AND id = ANY($1)
 		`, ids)
 	} else {
 		tag, err = r.pool.Exec(ctx, `
 			UPDATE outbox_events
 			SET status = 'PENDING', retry_count = 0, available_at = NOW(),
 			    last_error = NULL, lease_id = NULL, lease_until = NULL
-			WHERE status = 'FAILED'
+			WHERE aggregate_type <> 'QUANTUM_INVOICE' AND status = 'FAILED'
 		`)
 	}
 	if err != nil {

@@ -34,6 +34,10 @@ type deniedAudit struct{ controllers.AuditLog }
 type deniedOutbox struct{ controllers.OutboxService }
 type deniedNotifications struct{ controllers.Notifications }
 
+type deniedQuantum struct{ controllers.Quantum }
+
+func (d *deniedQuantum) Config() models.QuantumConfig { return models.QuantumConfig{Enabled: true} }
+
 type deniedSettlement struct{ controllers.Settlements }
 
 func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
@@ -49,9 +53,13 @@ func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
 		Audit:          controllers.NewAuditController(&deniedAudit{}),
 		Outbox:         controllers.NewOutboxController(&deniedOutbox{}),
 		Settlement:     controllers.NewSettlementController(&deniedSettlement{}),
+		Quantum:        controllers.NewQuantumController(&deniedQuantum{}),
 		Notifications:  controllers.NewNotificationController(&deniedNotifications{}),
 	})
 	policy := map[string]string{
+		"GET /api/v1/quantum/merchants/me": models.PermQuantumRead, "POST /api/v1/quantum/merchants": models.PermQuantumWrite,
+		"GET /api/v1/quantum/invoices": models.PermQuantumRead, "POST /api/v1/quantum/invoices": models.PermQuantumWrite,
+		"GET /api/v1/quantum/invoices/:id": models.PermQuantumRead, "POST /api/v1/quantum/invoices/:id/cancel": models.PermQuantumWrite,
 		"GET /api/v1/notifications": models.PermNotificationsRead, "GET /api/v1/notifications/metrics": models.PermNotificationsRead,
 		"GET /api/v1/notifications/:id": models.PermNotificationsRead, "POST /api/v1/notifications/:id/retry": models.PermNotificationsRetry,
 		"GET /api/v1/reconciliation/imports/:id/matches":          models.PermReconciliationRead,
@@ -81,6 +89,8 @@ func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
 	// Explicit exceptions: health and token-entry endpoints are public; current-user
 	// identity/name/logout operations verify their bearer session inside AuthService.
 	exceptions := map[string]bool{
+		"GET /api/v1/quantum/config": true, "GET /api/v1/quantum/checkout/:token": true, "GET /api/v1/quantum/checkout/:token/status": true,
+		"POST /api/v1/quantum/checkout/:token/attempts": true, "POST /api/v1/quantum/checkout/:token/attempts/:id/tx": true,
 		"GET /api/v1/auth/security":                         true,
 		"POST /api/v1/auth/security/recovery-codes":         true,
 		"POST /api/v1/auth/security/authenticator":          true,

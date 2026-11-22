@@ -16,6 +16,17 @@ import (
 // Unknown errors become 500 "internal_error" and are logged. Explicitly
 // unconfigured dependencies can use a route-specific unavailable responses.
 var ErrorTable = apperr.Table{
+	{Target: models.ErrQuantumMerchantExists, Error: apperr.Conflict("merchant_exists", "This user already has a Quantum merchant.")},
+	{Target: models.ErrQuantumMerchantNotFound, Error: apperr.NotFound("merchant_not_found", "Create a Quantum merchant first.")},
+	{Target: models.ErrQuantumInvoiceNotFound, Error: apperr.NotFound("invoice_not_found", "Invoice not found.")},
+	{Target: models.ErrQuantumCheckoutNotFound, Error: apperr.NotFound("checkout_not_found", "Checkout not found.")},
+	{Target: models.ErrQuantumNotPending, Error: apperr.Conflict("invoice_not_pending", "This invoice is not accepting new payments.")},
+	{Target: models.ErrQuantumTxSubmitted, Error: apperr.Conflict("tx_already_submitted", "A transaction is already attached to this attempt. Poll its status.")},
+	{Target: models.ErrQuantumAttemptExpired, Error: apperr.Conflict("attempt_expired", "This unused payment intent expired. Register a new attempt before signing a transfer.")},
+	{Target: models.ErrQuantumAmbiguous, Error: apperr.Conflict("payment_ambiguous", "An indistinguishable payment intent is already open. Finish or wait for that intent before paying another invoice.")},
+	{Target: models.ErrQuantumDuplicate, Error: apperr.Conflict("duplicate_transfer", "This transfer is already claimed.")},
+	{Target: models.ErrQuantumIdempotency, Error: apperr.Conflict("idempotency_conflict", "The same Idempotency-Key was used with a different invoice request.")},
+	{Target: models.ErrQuantumAttempts, Error: apperr.New(http.StatusTooManyRequests, "too_many_attempts", "At most five payment attempts may be open on an invoice.").WithHeader("Retry-After", "60")},
 	{Target: models.ErrDeliveryNotFound, Error: apperr.NotFound("delivery_not_found", "Notification delivery not found.")},
 	{Target: models.ErrDeliveryStale, Error: apperr.Conflict("delivery_stale", "This delivery changed or is not ready for manual retry. Refresh its details.")},
 	{Target: models.ErrPayoutNotFound, Error: apperr.NotFound("settlement_not_found", "Settlement not found.")},

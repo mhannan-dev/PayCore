@@ -13,6 +13,7 @@ import (
 )
 
 type Config struct {
+	Quantum          QuantumConfig
 	MFAEnabled       bool
 	MFAEncryptionKey string `json:"-"`
 	Port             string
@@ -67,6 +68,12 @@ func Load() *Config {
 	}
 	loadSMTP(cfg)
 	loadOutbox(cfg)
+	quantum, quantumErr := ParseQuantum(os.Getenv)
+	if quantumErr != nil {
+		log.Printf("Quantum disabled: %v", quantumErr)
+	} else {
+		cfg.Quantum = quantum
+	}
 	return cfg
 }
 

@@ -40,3 +40,12 @@ test("notification history and retries use separate capabilities", () => {
  assert.equal(rbac.hasPermission(["notifications:read"], rbac.PERMISSIONS.notificationsRetry), false);
  assert.equal(rbac.hasPermission(["notifications:retry"], rbac.PERMISSIONS.notificationsRetry), true);
 });
+
+test("quantum console needs read access and writes a separate capability", () => {
+ assert.equal(rbac.canVisit(null, "/quantum"), false);
+ assert.equal(rbac.canVisit(["quantum:read"], "/quantum"), true);
+ assert.equal(rbac.canVisit(null, "/pay/checkout-token"), true);
+ assert.equal(rbac.hasPermission(["quantum:read"], rbac.PERMISSIONS.quantumWrite), false);
+ assert.equal(rbac.hasPermission(["quantum:write"], rbac.PERMISSIONS.quantumWrite), true);
+ assert.equal(rbac.permissionGroup("quantum:read"), "Quantum payments");
+});

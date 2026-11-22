@@ -43,8 +43,9 @@ const (
 	MFAReplaced            Action = "mfa_replaced"
 	SessionsRevoked        Action = "sessions_revoked"
 
-	OutboxReplay      Action = "outbox_replay"
-	NotificationRetry Action = "notification_retry"
+	QuantumPaymentReorg Action = "quantum_payment_reorg"
+	OutboxReplay        Action = "outbox_replay"
+	NotificationRetry   Action = "notification_retry"
 )
 
 // Actions lists every Action, for validation and filters.
@@ -53,7 +54,7 @@ var Actions = []Action{StatementMatchingConfigured, StatementMatchConfirmed, Sta
 	RolesChanged, UserDeactivated, UserActivated, UserDeleted, PasswordResetRequested, PasswordResetCompleted,
 	MFAEnrolled, MFAVerified, MFAFailed, MFARecoveryUsed,
 	MFARecoveryRegenerated, MFAReplacementStarted, MFAReplaced, SessionsRevoked,
-	OutboxReplay, NotificationRetry,
+	OutboxReplay, NotificationRetry, QuantumPaymentReorg,
 }
 
 // Valid reports whether a is a known action.

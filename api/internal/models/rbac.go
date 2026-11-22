@@ -40,6 +40,8 @@ const (
 	PermAttachmentsRead      = "attachments:read"
 	PermAttachmentsWrite     = "attachments:write"
 	PermAttachmentsDelete    = "attachments:delete"
+	PermQuantumRead          = "quantum:read"
+	PermQuantumWrite         = "quantum:write"
 	PermNotificationsRead    = "notifications:read"
 	PermNotificationsRetry   = "notifications:retry"
 )
@@ -47,7 +49,7 @@ const (
 // Valid rejects misspelled or empty route requirements instead of bypassing RBAC.
 func (p PermissionCode) Valid() bool {
 	switch p {
-	case PermNotificationsRead, PermNotificationsRetry, PermReconciliationMatch, PermReconciliationRead, PermReconciliationImport, PermUsersRead, PermUsersWrite, PermTransfersRead, PermTransfersCreate, PermTransfersReverse,
+	case PermQuantumRead, PermQuantumWrite, PermNotificationsRead, PermNotificationsRetry, PermReconciliationMatch, PermReconciliationRead, PermReconciliationImport, PermUsersRead, PermUsersWrite, PermTransfersRead, PermTransfersCreate, PermTransfersReverse,
 		PermLedgerRead, PermAuditRead, PermAuditVerify, PermReportsRead, PermReportsExport,
 		PermSimulatorRun, PermSystemRead, PermSystemWrite, PermAccountsWrite, PermAttachmentsRead, PermAttachmentsWrite, PermAttachmentsDelete:
 		return true

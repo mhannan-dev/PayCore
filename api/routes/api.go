@@ -10,6 +10,7 @@ import (
 // A nil controller is replaced by one without dependencies, whose routes answer 503,
 // so the full route table exists for discovery (`-routes`) and tests.
 type Controllers struct {
+	Quantum        *controllers.QuantumController
 	Notifications  *controllers.NotificationController
 	Matching       *controllers.MatchingController
 	Statements     *controllers.StatementController
@@ -31,6 +32,7 @@ type Controllers struct {
 
 // Register mounts all API resource routes on the supplied version group.
 func Register(api *gin.RouterGroup, h Controllers) {
+	RegisterQuantum(api, h.Quantum, h.AuthMiddleware)
 	RegisterNotification(api, h.Notifications, h.AuthMiddleware)
 	RegisterSecurity(api, h.Security, h.AuthMiddleware)
 	RegisterMFA(api, h.MFA)

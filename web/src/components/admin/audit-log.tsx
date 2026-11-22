@@ -40,6 +40,7 @@ const ACTION_INFO: Record<AuditAction, { label: string; tone: BadgeTone }> = {
   sessions_revoked: { label: "Sessions revoked", tone: "neutral" },
   notification_retry: { label: "Notification retried", tone: "amber" },
   outbox_replay: { label: "Outbox events replayed", tone: "amber" },
+  quantum_payment_reorg: { label: "Quantum payment reorganised", tone: "amber" },
 };
 
 const FAILURE_REASONS: Record<string, string> = {

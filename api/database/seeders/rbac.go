@@ -31,6 +31,8 @@ func DefaultRoles() []RoleDefinition {
 
 func DefaultPermissions() []PermissionDefinition {
 	return []PermissionDefinition{
+		{Code: models.PermQuantumRead, Name: "Read Own Quantum Invoices", Description: "Read merchant-owned testnet invoices"},
+		{Code: models.PermQuantumWrite, Name: "Manage Own Quantum Invoices", Description: "Create and cancel merchant-owned testnet invoices"},
 		{Code: models.PermNotificationsRead, Name: "Read Notification Deliveries", Description: "Inspect sandbox notification outcomes"},
 		{Code: models.PermNotificationsRetry, Name: "Retry Notification Deliveries", Description: "Requeue failed notification events"},
 		{Code: models.PermReconciliationMatch, Name: "Review Own Statement Matches", Description: "Confirm and reject statement matches and record exception notes"},
@@ -59,6 +61,7 @@ func DefaultPermissions() []PermissionDefinition {
 func DefaultRolePermissions() map[string][]string {
 	return map[string][]string{
 		models.RoleAdmin: {
+			models.PermQuantumRead, models.PermQuantumWrite,
 			models.PermNotificationsRetry,
 			models.PermNotificationsRead,
 			models.PermReconciliationMatch,

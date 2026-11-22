@@ -13,10 +13,13 @@
     "test:rbac": "node --test tests/rbac.test.mjs"
   },
   "dependencies": {
+    "@tanstack/react-query": "5.108.2",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-toastify": "11.2.0",
+    "viem": "2.58.4",
+    "wagmi": "3.7.11",
     "yup": "1.7.1"
   },
   "devDependencies": {
