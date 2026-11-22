@@ -34,7 +34,7 @@ Compiler (`web/tsconfig.json`): `strict`, `noUncheckedIndexedAccess`, `noImplici
 
 ## Go (api/)
 
-16. **No unchecked type assertions.** Use `v, ok := x.(T)`. Values shared through `gin.Context` use the typed `contextKey[T]` in `internal/http/controllers/context_keys.go`, never `c.MustGet("…").(T)`. *(golangci `forcetypeassert`)*
+16. **No unchecked type assertions.** Use `v, ok := x.(T)`. Values shared through `gin.Context` are read through a typed accessor that checks the assertion (e.g. `middleware.CurrentUser(c)` returns `(models.UserDTO, bool)`), never `c.MustGet("…").(T)`. *(golangci `forcetypeassert`)*
 17. **Errors are compared with `errors.Is` / `errors.As`,** never `==` or a type assertion, and wrapped with `%w`. Return sentinel errors (`ErrEmailTaken`) rather than `nil, nil`. *(golangci `errorlint`, `nilnil`)*
 18. **Request bodies bind into typed structs** with size limits (`http.MaxBytesReader`) and validation (`binding` tags or a `Normalize()` method); never decode into `map[string]any`. *(review)*
 19. **Every JSON struct field has a `json` tag;** secrets are `json:"-"` (e.g. `PasswordHash`). *(golangci `musttag`)*
@@ -117,9 +117,9 @@ Route files may use `internal/http/routing` for declarative route-group registra
 
 ### How the pieces fit (reference implementation)
 
-- **Errors:** controllers call `fail(c, err)` (`internal/http/controllers/guard.go`); `middleware.Errors` (`internal/http/middleware/errors.go`) resolves it with `server.ErrorTable` (`internal/server/errors.go`); each route group sets its fallback with `middleware.ErrorFallback`. Request-shape errors use `apperr.BadRequest(...)` directly in the controllers.
+- **Errors:** controllers call `fail(c, err)` (`internal/http/controllers/controller.go`); `middleware.Errors` (`internal/http/middleware/errors.go`) resolves it with `server.ErrorTable` (`internal/server/errors.go`); each route group sets its fallback with `middleware.ErrorFallback`. Request-shape errors use `apperr.BadRequest(...)` directly in the controllers.
 - **Not found:** repositories return named sentinels (`repositories.ErrUserNotFound`, `ErrAttachmentNotFound`) that wrap `pgx.ErrNoRows`; a bare `pgx.ErrNoRows` is never mapped to HTTP.
-- **Authentication:** one shared `controllers.Guard` (`Session()`, `Require(permission)`) sets the caller and the audit actor.
+- **Authentication:** one shared `middleware.Auth` (`internal/http/middleware/authenticate.go`), created in `cmd/server/main.go` with `middleware.NewAuth(sessions)`. Routes apply `Authenticate()`, `Can(permission)` or `CanAll(...)`; it sets the caller and the audit actor (`audit.WithActor`). Controllers read the caller with `callerOrAbort(c)`, which wraps `middleware.CurrentUser(c)`.
 - **Wiring:** `cmd/server/main.go` builds `server.Controllers`, wraps it in `server.NewContainer`, and calls `Container.Router`; controllers depend only on interfaces such as `controllers.UserAdmin`, `controllers.AuthService`, `controllers.PasswordResets`.
 - **Request IDs:** every response carries `X-Request-ID`, which also prefixes logged server errors.
 
