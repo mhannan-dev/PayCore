@@ -16,6 +16,14 @@ import (
 // Unknown errors become 500 "internal_error" and are logged. Explicitly
 // unconfigured dependencies can use a route-specific unavailable responses.
 var ErrorTable = apperr.Table{
+	{Target: models.ErrDeliveryNotFound, Error: apperr.NotFound("delivery_not_found", "Notification delivery not found.")},
+	{Target: models.ErrDeliveryStale, Error: apperr.Conflict("delivery_stale", "This delivery changed or is not ready for manual retry. Refresh its details.")},
+	{Target: models.ErrPayoutNotFound, Error: apperr.NotFound("settlement_not_found", "Settlement not found.")},
+	{Target: models.ErrPayoutSource, Error: apperr.BadRequest("invalid_source_account", "Select an active customer liability wallet in this currency; clearing accounts cannot fund payouts.")},
+	{Target: models.ErrPayoutClearing, Error: apperr.Conflict("clearing_account_missing", "An active payout clearing liability account is required in this currency.")},
+	{Target: models.ErrPayoutBank, Error: apperr.Conflict("operating_bank_missing", "An active operating bank asset account is required in this currency.")},
+	{Target: models.ErrPayoutState, Error: apperr.Conflict("invalid_settlement_state", "Only RESERVED payouts can be captured or released.")},
+	{Target: models.ErrPayoutProvider, Error: apperr.Conflict("unsupported_provider", "Only sandbox payouts can be completed with this workflow.")},
 	{Target: models.ErrMFADisabled, Error: apperr.New(http.StatusConflict, "mfa_disabled", "MFA is temporarily disabled by system configuration.")},
 	{Target: models.ErrMatchInvalid, Error: apperr.BadRequest("invalid_matching_request", "Supply a valid direction mapping or review action with the current version. Rejection, reset and notes require a reason of 3–500 characters.")},
 	{Target: models.ErrMatchStale, Error: apperr.New(http.StatusConflict, "matching_stale", "This review changed. Refresh matching before trying again.")},
@@ -81,6 +89,8 @@ var ErrorTable = apperr.Table{
 
 	// Infrastructure
 	{Target: services.ErrUnavailable, Error: apperr.Unavailable("auth_unavailable", "The authentication service is unavailable. Try again shortly.")},
+	{Target: services.ErrOutboxPublisher, Error: apperr.Unavailable("outbox_unavailable", "Event delivery is not configured. Try again shortly.")},
+	{Target: services.ErrInvalidOutboxReplay, Error: apperr.BadRequest("invalid_outbox_replay", "Replay only accepts valid event IDs (at most 200).")},
 }
 
 func invalidUpload(err error) (*apperr.Error, bool) {

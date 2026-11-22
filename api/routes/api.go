@@ -10,6 +10,7 @@ import (
 // A nil controller is replaced by one without dependencies, whose routes answer 503,
 // so the full route table exists for discovery (`-routes`) and tests.
 type Controllers struct {
+	Notifications  *controllers.NotificationController
 	Matching       *controllers.MatchingController
 	Statements     *controllers.StatementController
 	Security       *controllers.SecurityController
@@ -21,6 +22,8 @@ type Controllers struct {
 	PasswordResets *controllers.PasswordResetController
 	Audit          *controllers.AuditController
 	Ledger         *controllers.LedgerController
+	Outbox         *controllers.OutboxController
+	Settlement     *controllers.SettlementController
 
 	// AuthMiddleware provides `auth` / `can:` checks for protected routes.
 	AuthMiddleware *middleware.Auth
@@ -28,6 +31,7 @@ type Controllers struct {
 
 // Register mounts all API resource routes on the supplied version group.
 func Register(api *gin.RouterGroup, h Controllers) {
+	RegisterNotification(api, h.Notifications, h.AuthMiddleware)
 	RegisterSecurity(api, h.Security, h.AuthMiddleware)
 	RegisterMFA(api, h.MFA)
 	RegisterAuth(api, h.Auth)
@@ -39,4 +43,6 @@ func Register(api *gin.RouterGroup, h Controllers) {
 	RegisterLedger(api, h.Ledger, h.AuthMiddleware)
 	RegisterStatement(api, h.Statements, h.AuthMiddleware)
 	RegisterMatching(api, h.Matching, h.AuthMiddleware)
+	RegisterOutbox(api, h.Outbox, h.AuthMiddleware)
+	RegisterSettlement(api, h.Settlement, h.AuthMiddleware)
 }

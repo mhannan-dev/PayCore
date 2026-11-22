@@ -1,13 +1,15 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
 	"paycore/api/internal/apperr"
 	"paycore/api/internal/http/controllers"
 	"paycore/api/internal/http/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 // RegisterSecurity registers the security endpoints and their middleware.
+
 func RegisterSecurity(api *gin.RouterGroup, h *controllers.SecurityController, auth *middleware.Auth) {
 	g := api.Group("/auth/security", middleware.NoStore, middleware.AuthRateLimit(), middleware.ErrorFallback(apperr.Unavailable("security_unavailable", "Account security is unavailable.")), h.Ready, auth.Authenticate())
 	g.GET("", h.Overview)

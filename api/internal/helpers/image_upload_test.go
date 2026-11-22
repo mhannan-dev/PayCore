@@ -14,6 +14,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -97,6 +98,34 @@ func TestImagesSavedAsWebP(t *testing.T) {
 				t.Fatal("lossless conversion did not preserve transparency/pixel colour")
 			}
 		})
+	}
+}
+
+func TestLargeImageCompressedBelowThreeMiB(t *testing.T) {
+	source := image.NewNRGBA(image.Rect(0, 0, 1200, 1200))
+	random := rand.New(rand.NewSource(1))
+	for y := 0; y < source.Bounds().Dy(); y++ {
+		for x := 0; x < source.Bounds().Dx(); x++ {
+			source.SetNRGBA(x, y, color.NRGBA{R: uint8(random.Intn(256)), G: uint8(random.Intn(256)), B: uint8(random.Intn(256)), A: 255})
+		}
+	}
+	var input bytes.Buffer
+	if err := png.Encode(&input, source); err != nil {
+		t.Fatal(err)
+	}
+	_, stored, err := uploadImageFixture(t, "noisy.png", input.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int64(len(stored)) > MaxWebPImageBytes {
+		t.Fatalf("converted image is %d bytes, want at most %d", len(stored), MaxWebPImageBytes)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(stored))
+	if err != nil || format != "webp" {
+		t.Fatalf("invalid converted WebP: %s %v", format, err)
+	}
+	if cfg.Width > source.Bounds().Dx() || cfg.Height > source.Bounds().Dy() {
+		t.Fatalf("compressed dimensions %dx%d exceed source", cfg.Width, cfg.Height)
 	}
 }
 

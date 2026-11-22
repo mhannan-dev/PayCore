@@ -15,16 +15,22 @@ import (
 	"path"
 	"strings"
 
-	"github.com/HugoSmits86/nativewebp"
-	_ "golang.org/x/image/bmp"
-	_ "golang.org/x/image/tiff"
 	"paycore/api/internal/models"
 	"paycore/api/internal/storage"
+
+	"github.com/HugoSmits86/nativewebp"
+	_ "golang.org/x/image/bmp"
+	imagedraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/tiff"
 )
 
 const WebPContentType = "image/webp"
+const MaxWebPImageBytes int64 = 3 << 20
 const maxImagePixels int64 = 25_000_000
 const maxImageSide = 10000
+const webPImageAttempts = 16
+const webPImageShrinkNumerator = 7
+const webPImageShrinkDenominator = 10
 
 type uploadImageFormat string
 
@@ -94,7 +100,7 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 	if uploadImageFormat(format) == imageFormatWebP && len(data) >= 21 && string(data[12:16]) == "VP8X" && data[20]&2 != 0 {
 		return nil, "", &models.UploadError{Code: models.UploadUnsupportedAnimation}
 	}
-	var out imageBuffer
+	var encoded []byte
 	switch uploadImageFormat(format) {
 	case imageFormatGIF:
 		if err = checkGIFBudget(data, cfg); err != nil {
@@ -103,7 +109,7 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 		var animation *gif.GIF
 		animation, err = gif.DecodeAll(bytes.NewReader(data))
 		if err == nil {
-			err = encodeGIF(&out, animation)
+			encoded, err = encodeGIF(animation)
 		}
 	case imageFormatJPEG, imageFormatPNG, imageFormatBMP, imageFormatTIFF, imageFormatWebP:
 		if uploadImageFormat(format) == imageFormatPNG && animatedPNG(data) {
@@ -112,13 +118,13 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 		var decoded image.Image
 		decoded, _, err = image.Decode(bytes.NewReader(data))
 		if err == nil {
-			err = nativewebp.Encode(&out, decoded, &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed})
+			encoded, err = encodeStillWebP(decoded)
 		}
 	default:
 		return nil, "", &models.UploadError{Code: models.UploadUnsupportedImage}
 	}
-	if out.overflow {
-		return nil, "", storage.ErrFileSize
+	if errors.Is(err, storage.ErrFileSize) {
+		return nil, "", err
 	}
 	if err != nil {
 		return nil, "", &models.UploadError{Code: models.UploadInvalidImage}
@@ -134,7 +140,7 @@ func (c *WebPConverter) Convert(ctx context.Context, source io.Reader, filename 
 	if len(runes) > 250 {
 		base = string(runes[:250])
 	}
-	return out.Bytes(), base + ".webp", nil
+	return encoded, base + ".webp", nil
 }
 
 // The encoder may ignore writer errors, so also check overflow after encoding.
@@ -144,7 +150,7 @@ type imageBuffer struct {
 }
 
 func (b *imageBuffer) Write(p []byte) (int, error) {
-	if int64(b.Len())+int64(len(p)) > storage.MaxFileSize {
+	if int64(b.Len())+int64(len(p)) > MaxWebPImageBytes {
 		b.overflow = true
 		return 0, storage.ErrFileSize
 	}
@@ -226,10 +232,44 @@ func checkGIFBudget(data []byte, cfg image.Config) error {
 	return invalid
 }
 
-func encodeGIF(w io.Writer, animation *gif.GIF) error {
-	if len(animation.Image) == 0 {
-		return errors.New("empty GIF")
+func encodeStillWebP(src image.Image) ([]byte, error) {
+	width, height := src.Bounds().Dx(), src.Bounds().Dy()
+	for attempt := 0; attempt < webPImageAttempts; attempt++ {
+		frame := image.Image(src)
+		if attempt > 0 {
+			w, h := scaledImageSize(width, height, attempt)
+			frame = scaleImage(src, w, h)
+		}
+		encoded, err := encodeWebPImage(frame)
+		if err != nil {
+			return nil, err
+		}
+		if encoded == nil {
+			continue
+		}
+		return encoded, nil
 	}
+	return nil, storage.ErrFileSize
+}
+
+func encodeGIF(animation *gif.GIF) ([]byte, error) {
+	if len(animation.Image) == 0 {
+		return nil, errors.New("empty GIF")
+	}
+	for attempt := 0; attempt < webPImageAttempts; attempt++ {
+		var out imageBuffer
+		if err := writeAnimation(&out, animation, attempt); err != nil {
+			return nil, err
+		}
+		if out.overflow {
+			continue
+		}
+		return out.Bytes(), nil
+	}
+	return nil, storage.ErrFileSize
+}
+
+func writeAnimation(w io.Writer, animation *gif.GIF, attempt int) error {
 	canvas := image.NewNRGBA(image.Rect(0, 0, animation.Config.Width, animation.Config.Height))
 	var background color.Color = color.Transparent
 	if int(animation.BackgroundIndex) < len(animation.Image[0].Palette) {
@@ -247,8 +287,15 @@ func encodeGIF(w io.Writer, animation *gif.GIF) error {
 		previous := image.NewNRGBA(canvas.Bounds())
 		draw.Draw(previous, previous.Bounds(), canvas, image.Point{}, draw.Src)
 		draw.Draw(canvas, frame.Bounds(), frame, frame.Bounds().Min, draw.Over)
-		snapshot := image.NewNRGBA(canvas.Bounds())
-		draw.Draw(snapshot, snapshot.Bounds(), canvas, image.Point{}, draw.Src)
+		snapshot := image.Image(canvas)
+		if attempt > 0 {
+			width, height := scaledImageSize(animation.Config.Width, animation.Config.Height, attempt)
+			snapshot = scaleImage(canvas, width, height)
+		} else {
+			copy := image.NewNRGBA(canvas.Bounds())
+			draw.Draw(copy, copy.Bounds(), canvas, image.Point{}, draw.Src)
+			snapshot = copy
+		}
 		sequence.Images = append(sequence.Images, snapshot)
 		sequence.Durations = append(sequence.Durations, uint(animation.Delay[i])*10)
 		sequence.Disposals = append(sequence.Disposals, 1)
@@ -261,8 +308,34 @@ func encodeGIF(w io.Writer, animation *gif.GIF) error {
 			}
 		}
 	}
+	options := &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed}
 	if len(sequence.Images) == 1 {
-		return nativewebp.Encode(w, sequence.Images[0], &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed})
+		return nativewebp.Encode(w, sequence.Images[0], options)
 	}
-	return nativewebp.EncodeAll(w, &sequence, &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed})
+	return nativewebp.EncodeAll(w, &sequence, options)
+}
+
+func encodeWebPImage(src image.Image) ([]byte, error) {
+	var out imageBuffer
+	if err := nativewebp.Encode(&out, src, &nativewebp.Options{CompressionLevel: nativewebp.BestSpeed}); err != nil {
+		return nil, err
+	}
+	if out.overflow {
+		return nil, nil
+	}
+	return out.Bytes(), nil
+}
+
+func scaledImageSize(width, height, attempt int) (int, int) {
+	for i := 0; i < attempt; i++ {
+		width = max(1, width*webPImageShrinkNumerator/webPImageShrinkDenominator)
+		height = max(1, height*webPImageShrinkNumerator/webPImageShrinkDenominator)
+	}
+	return width, height
+}
+
+func scaleImage(src image.Image, width, height int) image.Image {
+	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
+	imagedraw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), imagedraw.Src, nil)
+	return dst
 }

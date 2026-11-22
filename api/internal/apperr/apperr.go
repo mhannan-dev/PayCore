@@ -58,6 +58,7 @@ func (e *Error) WithHeader(name, value string) *Error {
 func BadRequest(code, message string) *Error { return New(http.StatusBadRequest, code, message) }
 func NotFound(code, message string) *Error   { return New(http.StatusNotFound, code, message) }
 func Forbidden(code, message string) *Error  { return New(http.StatusForbidden, code, message) }
+func Conflict(code, message string) *Error   { return New(http.StatusConflict, code, message) }
 func Unavailable(code, message string) *Error {
 	return New(http.StatusServiceUnavailable, code, message)
 }

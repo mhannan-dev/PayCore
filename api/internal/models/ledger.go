@@ -325,8 +325,9 @@ type AccountQuery struct {
 
 // JournalQuery filters and pages journals.
 type JournalQuery struct {
-	Search    string // reference or description
-	AccountID string // only journals touching this account
+	Currency  Currency // empty means all currencies
+	Search    string   // reference or description
+	AccountID string   // only journals touching this account
 	Limit     int
 	Offset    int
 }

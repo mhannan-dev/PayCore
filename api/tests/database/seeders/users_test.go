@@ -20,7 +20,7 @@ func TestUsersIntegration(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set DATABASE_TEST_URL for isolated seeder integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second) // Runs every migration first; slow CI disks need headroom.
 	defer cancel()
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {

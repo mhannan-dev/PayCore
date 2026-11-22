@@ -18,10 +18,11 @@ import (
 
 // fakeLedger records calls and returns scripted results.
 type fakeLedger struct {
-	transferErr error
-	lastKey     string
-	lastActor   models.UserDTO
-	replay      bool
+	lastJournalQuery models.JournalQuery
+	transferErr      error
+	lastKey          string
+	lastActor        models.UserDTO
+	replay           bool
 }
 
 func (f *fakeLedger) CreateAccount(_ context.Context, actor models.UserDTO, req models.CreateAccountRequest) (models.Account, error) {
@@ -42,7 +43,8 @@ func (f *fakeLedger) AccountPostings(context.Context, string, int, int) ([]model
 func (f *fakeLedger) Journal(context.Context, string) (models.Journal, error) {
 	return models.Journal{}, repositories.ErrJournalNotFound
 }
-func (f *fakeLedger) Journals(context.Context, models.JournalQuery) ([]models.Journal, int, error) {
+func (f *fakeLedger) Journals(_ context.Context, q models.JournalQuery) ([]models.Journal, int, error) {
+	f.lastJournalQuery = q
 	return nil, 0, nil
 }
 func (f *fakeLedger) ZeroSum(_ context.Context, c models.Currency) (models.ZeroSumReport, error) {

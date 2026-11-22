@@ -40,6 +40,8 @@ func main() {
 	var registeredControllers server.Controllers
 	var emailCancel context.CancelFunc
 	var emailDone chan struct{}
+	var outboxCancel context.CancelFunc
+	var outboxDone chan struct{}
 	if !*listRoutes {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := database.Open(ctx, cfg.DatabaseURL)
@@ -111,7 +113,29 @@ func main() {
 		resets := services.NewPasswordResetService(repositories.NewPasswordResetRepository(pool), challenges, mail != nil, cfg.AppURL)
 		resets.Audit = auditLog
 		registeredControllers.PasswordResets = controllers.NewPasswordResetController(resets)
-		registeredControllers.Ledger = controllers.NewLedgerController(services.NewLedgerService(repositories.NewLedgerRepository(pool)))
+		ledgerService := services.NewLedgerService(repositories.NewLedgerRepository(pool))
+		registeredControllers.Ledger = controllers.NewLedgerController(ledgerService)
+		settlementService := services.NewSettlementService(repositories.NewSettlementRepository(pool))
+		registeredControllers.Settlement = controllers.NewSettlementController(settlementService)
+		publisher, err := newOutboxPublisher(cfg.Outbox)
+		if err != nil {
+			log.Fatalf("Outbox publisher configuration is invalid: %v", err)
+		}
+		notificationRepo := repositories.NewNotificationRepository(pool)
+		notificationService := services.NewNotificationService(notificationRepo)
+		notificationService.Audit = auditLog
+		registeredControllers.Notifications = controllers.NewNotificationController(notificationService)
+		publisher = services.NewNotificationPublisher(notificationRepo, services.SandboxNotificationSink{}, publisher)
+		outboxRelay := services.NewOutboxRelay(repositories.NewOutboxRepository(pool), publisher).
+			WithBatchSize(cfg.Outbox.BatchSize).
+			WithInterval(cfg.Outbox.Interval).
+			WithMaxRetries(cfg.Outbox.MaxRetries)
+		outboxRelay.Audit = auditLog
+		registeredControllers.Outbox = controllers.NewOutboxController(outboxRelay)
+		outboxWorkerCtx, outboxWorkerCancel := context.WithCancel(context.Background())
+		outboxCancel = outboxWorkerCancel
+		outboxDone = make(chan struct{})
+		go func() { defer close(outboxDone); outboxRelay.Run(outboxWorkerCtx) }()
 		db = pool
 		log.Println("PostgreSQL connection verified; connection pool ready")
 	}
@@ -175,11 +199,29 @@ func main() {
 		}
 	}
 	mailCancel()
+	if outboxCancel != nil {
+		outboxCancel()
+		select {
+		case <-outboxDone:
+		case <-time.After(5 * time.Second):
+		}
+	}
 	if shutdownErr != nil {
 		log.Fatalf("Server forced to shutdown: %v", shutdownErr)
 	}
 
 	log.Println("Server exiting")
+}
+
+func newOutboxPublisher(cfg config.OutboxConfig) (services.EventPublisher, error) {
+	switch cfg.Publisher {
+	case "log":
+		return services.NewLogEventPublisher(), nil
+	case "webhook":
+		return services.NewWebhookEventPublisher(cfg.WebhookURL, cfg.WebhookSecret, 5*time.Second)
+	default:
+		return nil, fmt.Errorf("unsupported outbox publisher %q", cfg.Publisher)
+	}
 }
 
 // portInUse reports "address already in use" on every platform (Windows reports

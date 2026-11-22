@@ -31,6 +31,10 @@ type deniedLedger struct{ controllers.Ledger }
 type deniedMatching struct{ controllers.Matching }
 type deniedStatements struct{ controllers.Statements }
 type deniedAudit struct{ controllers.AuditLog }
+type deniedOutbox struct{ controllers.OutboxService }
+type deniedNotifications struct{ controllers.Notifications }
+
+type deniedSettlement struct{ controllers.Settlements }
 
 func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
 	identity := &policyIdentity{user: models.UserDTO{ID: adminID, Roles: []string{models.RoleAdmin}}}
@@ -43,8 +47,13 @@ func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
 		Attachments:    controllers.NewAttachmentController(&deniedAttachments{}, nil),
 		Ledger:         controllers.NewLedgerController(&deniedLedger{}),
 		Audit:          controllers.NewAuditController(&deniedAudit{}),
+		Outbox:         controllers.NewOutboxController(&deniedOutbox{}),
+		Settlement:     controllers.NewSettlementController(&deniedSettlement{}),
+		Notifications:  controllers.NewNotificationController(&deniedNotifications{}),
 	})
 	policy := map[string]string{
+		"GET /api/v1/notifications": models.PermNotificationsRead, "GET /api/v1/notifications/metrics": models.PermNotificationsRead,
+		"GET /api/v1/notifications/:id": models.PermNotificationsRead, "POST /api/v1/notifications/:id/retry": models.PermNotificationsRetry,
 		"GET /api/v1/reconciliation/imports/:id/matches":          models.PermReconciliationRead,
 		"POST /api/v1/reconciliation/imports/:id/matching":        models.PermReconciliationMatch,
 		"POST /api/v1/reconciliation/imports/:id/rows/:row/match": models.PermReconciliationMatch,
@@ -62,7 +71,10 @@ func TestEveryPermissionRouteDeniesMissingOrUnrelatedGrants(t *testing.T) {
 		"GET /api/v1/transfers": models.PermTransfersRead, "GET /api/v1/transfers/:id": models.PermTransfersRead,
 		"POST /api/v1/transfers": models.PermTransfersCreate, "POST /api/v1/transfers/:id/reverse": models.PermTransfersReverse,
 		"GET /api/v1/audit/zero-sum": models.PermAuditVerify,
-		"GET /api/v1/attachments":    models.PermAttachmentsRead, "POST /api/v1/attachments": models.PermAttachmentsWrite,
+		"GET /api/v1/outbox/metrics": models.PermSystemRead, "POST /api/v1/outbox/replay": models.PermSystemWrite,
+		"GET /api/v1/settlements": models.PermTransfersRead, "GET /api/v1/settlements/:id": models.PermTransfersRead,
+		"POST /api/v1/settlements": models.PermTransfersCreate, "POST /api/v1/settlements/:id/capture": models.PermTransfersReverse, "POST /api/v1/settlements/:id/release": models.PermTransfersReverse,
+		"GET /api/v1/attachments": models.PermAttachmentsRead, "POST /api/v1/attachments": models.PermAttachmentsWrite,
 		"GET /api/v1/attachments/:id": models.PermAttachmentsRead, "GET /api/v1/attachments/:id/content": models.PermAttachmentsRead,
 		"DELETE /api/v1/attachments/:id": models.PermAttachmentsDelete, "GET /api/v1/auth/photo": models.PermAttachmentsRead, "PUT /api/v1/auth/photo": models.PermAttachmentsWrite,
 	}

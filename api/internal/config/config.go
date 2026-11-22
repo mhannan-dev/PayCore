@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -30,6 +31,19 @@ type Config struct {
 	SMTPEncryption string // starttls, tls or none
 	// SMTPSource says which variable set was used ("SMTP_*" or "MAIL_*"), for the startup log.
 	SMTPSource string
+	// Outbox configures the background delivery of committed ledger events.
+	Outbox OutboxConfig
+}
+
+// OutboxConfig selects the event publisher and its retry behaviour. The webhook
+// sink can be a broker bridge or a consumer inbox; "log" needs no infrastructure.
+type OutboxConfig struct {
+	Publisher     string
+	WebhookURL    string
+	WebhookSecret string `json:"-"`
+	BatchSize     int
+	MaxRetries    int
+	Interval      time.Duration
 }
 
 func Load() *Config {
@@ -52,7 +66,41 @@ func Load() *Config {
 		AppURL:           getEnv("APP_URL", "http://localhost:3000"),
 	}
 	loadSMTP(cfg)
+	loadOutbox(cfg)
 	return cfg
+}
+
+func loadOutbox(cfg *Config) {
+	c := OutboxConfig{
+		Publisher:     strings.ToLower(strings.TrimSpace(getEnv("OUTBOX_PUBLISHER", "log"))),
+		WebhookURL:    strings.TrimSpace(os.Getenv("OUTBOX_WEBHOOK_URL")),
+		WebhookSecret: os.Getenv("OUTBOX_WEBHOOK_SECRET"),
+		BatchSize:     envInt("OUTBOX_BATCH_SIZE", 50, 1, 500),
+		MaxRetries:    envInt("OUTBOX_MAX_RETRIES", 5, 1, 20),
+		Interval:      time.Duration(envInt("OUTBOX_INTERVAL_SECONDS", 1, 1, 300)) * time.Second,
+	}
+	switch c.Publisher {
+	case "log", "webhook":
+	default:
+		log.Fatal("OUTBOX_PUBLISHER must be log or webhook.")
+	}
+	if c.Publisher == "webhook" && c.WebhookURL == "" {
+		log.Fatal("OUTBOX_WEBHOOK_URL is required when OUTBOX_PUBLISHER=webhook.")
+	}
+	cfg.Outbox = c
+}
+
+func envInt(key string, fallback, min, max int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < min || value > max {
+		log.Printf("%s must be a number between %d and %d; using %d.", key, min, max, fallback)
+		return fallback
+	}
+	return value
 }
 
 func parseMFAEnabled(value string) (bool, error) {

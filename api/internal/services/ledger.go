@@ -62,6 +62,9 @@ func (s *LedgerService) Journal(ctx context.Context, id string) (models.Journal,
 }
 
 func (s *LedgerService) Journals(ctx context.Context, q models.JournalQuery) ([]models.Journal, int, error) {
+	if q.Currency != "" && !q.Currency.Valid() {
+		return nil, 0, models.InvalidRequestError{Code: "invalid_currency", Reason: "currency must be JPY, USD or EUR."}
+	}
 	return s.store.ListJournals(ctx, q)
 }
 

@@ -220,12 +220,13 @@ func (r *LedgerRepository) GetJournal(ctx context.Context, id string) (models.Jo
 func (r *LedgerRepository) ListJournals(ctx context.Context, q models.JournalQuery) ([]models.Journal, int, error) {
 	pattern := likePattern(q.Search)
 	const where = ` WHERE ($1 = '%%' OR j.reference_id ILIKE $1 OR j.description ILIKE $1)
-		AND ($2 = '' OR EXISTS (SELECT 1 FROM ledger_postings p WHERE p.journal_entry_id = j.id AND p.account_id::text = $2))`
+		AND ($2 = '' OR EXISTS (SELECT 1 FROM ledger_postings p WHERE p.journal_entry_id = j.id AND p.account_id::text = $2))
+		AND ($3 = '' OR j.currency = $3)`
 	var total int
-	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM journal_entries j"+where, pattern, q.AccountID).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, "SELECT count(*) FROM journal_entries j"+where, pattern, q.AccountID, string(q.Currency)).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	rows, err := r.pool.Query(ctx, "SELECT "+journalColumns+" FROM journal_entries j"+where+" ORDER BY j.posted_at DESC, j.id DESC LIMIT $3 OFFSET $4", pattern, q.AccountID, q.Limit, q.Offset)
+	rows, err := r.pool.Query(ctx, "SELECT "+journalColumns+" FROM journal_entries j"+where+" ORDER BY j.posted_at DESC, j.id DESC LIMIT $4 OFFSET $5", pattern, q.AccountID, string(q.Currency), q.Limit, q.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -246,39 +247,41 @@ func (r *LedgerRepository) ListJournals(ctx context.Context, q models.JournalQue
 }
 
 // ZeroSum checks the double-entry invariant across all journals in a currency.
+// One statement keeps totals, counts and findings on the same PostgreSQL snapshot,
+// even when transfers commit while the audit runs.
 func (r *LedgerRepository) ZeroSum(ctx context.Context, currency models.Currency) (models.ZeroSumReport, error) {
 	report := models.ZeroSumReport{Currency: currency, UnbalancedJournals: []string{}}
-	err := r.pool.QueryRow(ctx, `SELECT
-			COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0)::text,
-			COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0)::text,
-			(COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0) - COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0))::text,
-			(SELECT count(*) FROM journal_entries WHERE currency = $1),
-			count(p.id),
-			NOW()
-		FROM journal_entries j JOIN ledger_postings p ON p.journal_entry_id = j.id
-		WHERE j.currency = $1`, string(currency)).
-		Scan(&report.TotalDebits, &report.TotalCredits, &report.Difference, &report.Journals, &report.Postings, &report.CheckedAt)
+	err := r.pool.QueryRow(ctx, `
+		WITH totals AS (
+			SELECT
+				COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0)::text AS debits,
+				COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0)::text AS credits,
+				(COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0) - COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0))::text AS difference,
+				count(DISTINCT j.id) AS journals,
+				count(p.id) AS postings
+			FROM journal_entries j JOIN ledger_postings p ON p.journal_entry_id = j.id
+			WHERE j.currency = $1
+		), unbalanced AS (
+			SELECT j.id
+			FROM journal_entries j LEFT JOIN ledger_postings p ON p.journal_entry_id = j.id
+			WHERE j.currency = $1
+			GROUP BY j.id
+			HAVING count(p.id) < 2
+			    OR COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0) <> COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0)
+			LIMIT 100
+		)
+		SELECT t.debits, t.credits, t.difference, t.journals, t.postings, NOW(),
+			COALESCE((SELECT array_agg(id::text ORDER BY id) FROM unbalanced), '{}'::text[])
+		FROM totals t`, string(currency)).
+		Scan(&report.TotalDebits, &report.TotalCredits, &report.Difference, &report.Journals, &report.Postings, &report.CheckedAt, &report.UnbalancedJournals)
 	if err != nil {
 		return report, err
 	}
-	rows, err := r.pool.Query(ctx, `SELECT j.id FROM journal_entries j LEFT JOIN ledger_postings p ON p.journal_entry_id = j.id
-		WHERE j.currency = $1 GROUP BY j.id
-		HAVING count(p.id) < 2
-		    OR COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'DEBIT'), 0) <> COALESCE(SUM(p.amount) FILTER (WHERE p.direction = 'CREDIT'), 0)
-		LIMIT 100`, string(currency))
-	if err != nil {
-		return report, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return report, err
-		}
-		report.UnbalancedJournals = append(report.UnbalancedJournals, id)
+	if report.UnbalancedJournals == nil {
+		report.UnbalancedJournals = []string{}
 	}
 	report.Balanced = report.Difference == "0" && len(report.UnbalancedJournals) == 0
-	return report, rows.Err()
+	return report, nil
 }
 
 // --- Writes ---------------------------------------------------------------------
@@ -291,10 +294,18 @@ func (r *LedgerRepository) ZeroSum(ctx context.Context, currency models.Currency
 // serialization failures retry the whole transaction, keeping the key.
 func (r *LedgerRepository) Idempotent(ctx context.Context, clientID, key, requestHash string,
 	op func(ctx context.Context, w models.LedgerWriter) (int, []byte, error)) (models.IdempotentResult, error) {
+	return runIdempotent(ctx, r.pool, clientID, key, requestHash, func(ctx context.Context, tx pgx.Tx) (int, []byte, error) {
+		return op(ctx, &ledgerWriter{tx: tx})
+	})
+}
+
+// runIdempotent also lets payouts commit their state in the ledger transaction.
+func runIdempotent(ctx context.Context, pool *pgxpool.Pool, clientID, key, requestHash string,
+	op func(context.Context, pgx.Tx) (int, []byte, error)) (models.IdempotentResult, error) {
 	var err error
 	for attempt := 0; attempt < maxTxAttempts; attempt++ {
 		var result models.IdempotentResult
-		result, err = r.idempotentOnce(ctx, clientID, key, requestHash, op)
+		result, err = idempotentOnce(ctx, pool, clientID, key, requestHash, op)
 		if !retryable(err) {
 			return result, err
 		}
@@ -302,9 +313,9 @@ func (r *LedgerRepository) Idempotent(ctx context.Context, clientID, key, reques
 	return models.IdempotentResult{}, ErrLedgerBusy
 }
 
-func (r *LedgerRepository) idempotentOnce(ctx context.Context, clientID, key, requestHash string,
-	op func(ctx context.Context, w models.LedgerWriter) (int, []byte, error)) (models.IdempotentResult, error) {
-	tx, err := r.pool.Begin(ctx)
+func idempotentOnce(ctx context.Context, pool *pgxpool.Pool, clientID, key, requestHash string,
+	op func(context.Context, pgx.Tx) (int, []byte, error)) (models.IdempotentResult, error) {
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return models.IdempotentResult{}, err
 	}
@@ -343,7 +354,7 @@ func (r *LedgerRepository) idempotentOnce(ctx context.Context, clientID, key, re
 	if _, err := tx.Exec(ctx, "SELECT set_config('lock_timeout', $1, true)", accountLockTimeout); err != nil {
 		return models.IdempotentResult{}, err
 	}
-	status, body, err := op(ctx, &ledgerWriter{tx: tx})
+	status, body, err := op(ctx, tx)
 	if isLockTimeout(err) {
 		return models.IdempotentResult{}, ErrLedgerBusy
 	}

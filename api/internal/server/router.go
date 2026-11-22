@@ -79,6 +79,15 @@ func New(db DatabasePinger, h Controllers) *gin.Engine {
 	if h.Ledger == nil {
 		h.Ledger = controllers.NewLedgerController(nil)
 	}
+	if h.Notifications == nil {
+		h.Notifications = controllers.NewNotificationController(nil)
+	}
+	if h.Outbox == nil {
+		h.Outbox = controllers.NewOutboxController(nil)
+	}
+	if h.Settlement == nil {
+		h.Settlement = controllers.NewSettlementController(nil)
+	}
 
 	v1 := r.Group("/api/v1")
 	if h.Security == nil {

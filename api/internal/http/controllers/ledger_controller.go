@@ -168,7 +168,12 @@ func (h *LedgerController) Transfers(c *gin.Context) {
 		fail(c, apperr.BadRequest("invalid_account_id", "account_id must be a UUID."))
 		return
 	}
-	journals, total, err := h.ledger.Journals(c.Request.Context(), models.JournalQuery{Search: q, AccountID: accountID, Limit: limit, Offset: offset})
+	currency := models.Currency(strings.ToUpper(strings.TrimSpace(c.Query("currency"))))
+	if currency != "" && !currency.Valid() {
+		fail(c, apperr.BadRequest("invalid_currency", "currency must be JPY, USD or EUR."))
+		return
+	}
+	journals, total, err := h.ledger.Journals(c.Request.Context(), models.JournalQuery{Currency: currency, Search: q, AccountID: accountID, Limit: limit, Offset: offset})
 	if err != nil {
 		fail(c, err)
 		return

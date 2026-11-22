@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"testing"
 	"time"
@@ -351,5 +352,199 @@ func TestLedgerDatabaseInvariants(t *testing.T) {
 
 	if report, err := f.svc.ZeroSum(ctx, models.CurrencyJPY); err != nil || !report.Balanced || report.Journals != 1 {
 		t.Fatalf("ledger must be unchanged: %+v %v", report, err)
+	}
+}
+
+// ZeroSum must not mix a pre-commit aggregate with post-commit findings: every
+// report taken during concurrent transfers sees one snapshot, so postings are
+// always exactly twice the journal count for this two-legged fixture.
+func TestLedgerZeroSumConsistentSnapshot(t *testing.T) {
+	f := newLedgerFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if _, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer("FUND-RACE", f.bank, f.alice, 10000)); err != nil {
+		t.Fatal(err)
+	}
+
+	const workers = 8
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer(fmt.Sprintf("RACE-%d", i), f.alice, f.bob, 1))
+			errs <- err
+		}(i)
+	}
+	defer wg.Wait()
+
+	for i := 0; i < 25; i++ {
+		report, err := f.svc.ZeroSum(ctx, models.CurrencyJPY)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !report.Balanced || report.Difference != "0" || len(report.UnbalancedJournals) != 0 {
+			t.Fatalf("torn zero-sum report: %+v", report)
+		}
+		if report.Postings != report.Journals*2 {
+			t.Fatalf("zero-sum mixed snapshots: %d postings for %d journals", report.Postings, report.Journals)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	final, err := f.svc.ZeroSum(ctx, models.CurrencyJPY)
+	if err != nil || final.Journals != workers+1 || final.Postings != (workers+1)*2 {
+		t.Fatalf("final zero-sum: %+v %v", final, err)
+	}
+}
+
+func TestLedgerZeroSumInvariantTable(t *testing.T) {
+	type expectation struct {
+		currency models.Currency
+		debits   string
+		credits  string
+		journals int
+		postings int
+	}
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, f *ledgerFixture)
+		want  []expectation
+	}{
+		{
+			name:  "empty ledger",
+			setup: func(t *testing.T, f *ledgerFixture) {},
+			want:  []expectation{{currency: models.CurrencyJPY, debits: "0", credits: "0"}},
+		},
+		{
+			name: "single balanced transfer",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				if _, err := f.svc.Transfer(context.Background(), f.actor, f.key(), transfer("ZS-SINGLE", f.bank, f.alice, 100)); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []expectation{{currency: models.CurrencyJPY, debits: "100", credits: "100", journals: 1, postings: 2}},
+		},
+		{
+			name: "multiple balanced transfers",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				ctx := context.Background()
+				if _, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer("ZS-MULTI-1", f.bank, f.alice, 100)); err != nil {
+					t.Fatal(err)
+				}
+				req := transfer("ZS-MULTI-2", f.bank, f.alice, 50)
+				req.Legs = append(req.Legs,
+					models.Leg{AccountID: f.bank.ID, Direction: models.Debit, Amount: 25},
+					models.Leg{AccountID: f.bob.ID, Direction: models.Credit, Amount: 25},
+				)
+				if _, err := f.svc.Transfer(ctx, f.actor, f.key(), req); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []expectation{{currency: models.CurrencyJPY, debits: "175", credits: "175", journals: 2, postings: 6}},
+		},
+		{
+			name: "transfer and reversal",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				ctx := context.Background()
+				res, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer("ZS-REVERSAL", f.bank, f.alice, 300))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.svc.Reverse(ctx, f.actor, f.key(), decodeJournal(t, res).ID, models.ReverseRequest{}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []expectation{{currency: models.CurrencyJPY, debits: "600", credits: "600", journals: 2, postings: 4}},
+		},
+		{
+			name: "idempotent replay posts once",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				ctx := context.Background()
+				key := f.key()
+				for i := 0; i < 2; i++ {
+					res, err := f.svc.Transfer(ctx, f.actor, key, transfer("ZS-REPLAY", f.bank, f.alice, 125))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if i == 1 && !res.Replayed {
+						t.Fatalf("second transfer was not a replay: %+v", res)
+					}
+				}
+			},
+			want: []expectation{{currency: models.CurrencyJPY, debits: "125", credits: "125", journals: 1, postings: 2}},
+		},
+		{
+			name: "currency isolation",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				ctx := context.Background()
+				if _, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer("ZS-JPY", f.bank, f.alice, 100)); err != nil {
+					t.Fatal(err)
+				}
+				usd := transfer("ZS-USD", f.usdCash, f.usdCash, 250)
+				usd.Currency = models.CurrencyUSD
+				if _, err := f.svc.Transfer(ctx, f.actor, f.key(), usd); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: []expectation{
+				{currency: models.CurrencyJPY, debits: "100", credits: "100", journals: 1, postings: 2},
+				{currency: models.CurrencyUSD, debits: "250", credits: "250", journals: 1, postings: 2},
+			},
+		},
+		{
+			name: "unbalanced transfer rejected",
+			setup: func(t *testing.T, f *ledgerFixture) {
+				req := transfer("ZS-UNBALANCED", f.bank, f.alice, 100)
+				req.Legs[1].Amount = 99
+				if _, err := f.svc.Transfer(context.Background(), f.actor, f.key(), req); err == nil {
+					t.Fatal("expected unbalanced transfer to be rejected")
+				}
+			},
+			want: []expectation{{currency: models.CurrencyJPY, debits: "0", credits: "0"}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLedgerFixture(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			tc.setup(t, f)
+			for _, want := range tc.want {
+				report, err := f.svc.ZeroSum(ctx, want.currency)
+				if err != nil {
+					t.Fatal(err)
+				}
+				debits, ok := new(big.Int).SetString(report.TotalDebits, 10)
+				if !ok {
+					t.Fatalf("invalid total debits %q", report.TotalDebits)
+				}
+				credits, ok := new(big.Int).SetString(report.TotalCredits, 10)
+				if !ok {
+					t.Fatalf("invalid total credits %q", report.TotalCredits)
+				}
+				difference := new(big.Int).Sub(debits, credits)
+				if difference.Sign() != 0 || report.Difference != "0" || !report.Balanced {
+					t.Fatalf("zero-sum invariant failed: %+v, computed %s", report, difference)
+				}
+				if report.Currency != want.currency || report.TotalDebits != want.debits || report.TotalCredits != want.credits {
+					t.Fatalf("zero-sum totals: %+v want %+v", report, want)
+				}
+				if report.Journals != want.journals || report.Postings != want.postings {
+					t.Fatalf("zero-sum counts: %+v want %+v", report, want)
+				}
+				if len(report.UnbalancedJournals) != 0 || report.CheckedAt.IsZero() {
+					t.Fatalf("zero-sum metadata: %+v", report)
+				}
+			}
+		})
 	}
 }
