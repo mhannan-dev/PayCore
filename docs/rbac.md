@@ -4,7 +4,7 @@ Roles, permissions and their mapping live in migration `008_rbac.sql` (kept curr
 
 ## Enforcement audit (19 November 2026)
 
-- All 26 permission-protected API routes have negative authorization tests: no
+- All 28 permission-protected API routes have negative authorization tests: no
   session returns `401`; every grant except the required one returns `403`, even
   when the identity has an `ADMIN` role label. New routes must have an explicit
   policy or a documented public/self-service exception in the coverage test.
@@ -44,9 +44,14 @@ grants when run, so do not use it to preserve intentional default-role revocatio
 | reports:export | Y | — | — | Y | — |
 | simulator:run | Y | — | — | — | Y |
 | system:read | Y | — | — | — | Y |
+| system:write | Y | — | — | — | Y |
 | attachments:read | Y | Y | Y | Y | Y |
 | attachments:write | Y | Y | Y | Y | Y |
 | attachments:delete | Y | Y | Y | Y | Y |
+
+`GET /api/v1/outbox/metrics` requires `system:read`; `POST /api/v1/outbox/replay`
+requires `system:write` (migration `021_outbox_delivery.sql`). Both ADMIN and
+STAFF_ENGINEER receive the new write grant, and every replay is audited.
 
 Health endpoints and CAPTCHA/login/invitation/reset entry points remain public
 (token-entry endpoints retain validation and rate limits). `/auth/me`, self-name
@@ -158,3 +163,5 @@ The console shows the log at `/admin/audit-log` (needs `audit:read`: Admin, Lead
 
 Deactivating a user (`users:write`) blocks sign-in, deletes their sessions and unused reset links, and keeps the account, roles and history; you cannot deactivate yourself or the last active Admin.
 
+
+Notification delivery history requires `notifications:read` (all five default roles). Manual retries require `notifications:retry` (ADMIN and STAFF_ENGINEER). A retry can only requeue a failed delivery event using its current attempt count; it does not move funds.

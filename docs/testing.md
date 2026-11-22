@@ -57,3 +57,7 @@ $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/pa
 ```
 
 Repository, controller and seeder integration suites use isolated schemas and clean them up after testing. Migration tests remain in `api/database/migrations` because they inspect embedded SQL and private migration helpers.
+
+## Opt-in local PostgreSQL tests
+
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Suite api -Integration` with the local database in `compose.yaml` running. This uses its public localhost development connection unless `DATABASE_TEST_URL` is already set. The runner restores that environment variable afterward and serializes Go packages to avoid competing migration advisory locks. All repository tests use isolated schemas that are cleaned up at completion.

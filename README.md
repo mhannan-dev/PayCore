@@ -35,7 +35,7 @@ PayCore is a learning-grade but production-minded fintech core: an append-only d
 
 ## Project status
 
-PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core** (accounts, transfers, reversals, zero-sum audit) is implemented and drives the Accounts, Transfer studio, Ledger explorer and Invariant audit pages; Overview, Reports, Notifications, Settlements and Simulator still show *sample data*. See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
+PayCore is in **alpha**. The platform layer (authentication, access control, user management, email, file storage) is implemented and tested against PostgreSQL. The **ledger core** (accounts, transfers, reversals, zero-sum audit, transactional outbox relay) is implemented and drives the Accounts, Transfer studio, Ledger explorer, Invariant audit, Event outbox and live Idempotency sandbox pages; Overview and Reports now read the API, and Settlements now supports live sandbox payout reservation, capture and release. The Delivery Center now shows live sandbox notification receipts and retries from the transactional outbox; no external notification emails or webhooks are sent. See [sandbox notifications](docs/notifications.md). See the [roadmap](ProjectFeature.md#6-implementation--portfolio-roadmap) and the [feature checklist](docs/feature_list_bn.md).
 
 **Do not use PayCore to move real money.**
 
@@ -44,7 +44,7 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 **Implemented**
 
 - **Email and password sign-in** with a server-generated math CAPTCHA, bcrypt hashing, and revocable bearer sessions (only token hashes are stored).
-- **Role-based access control:** 5 roles and 12 fine-grained permissions, enforced by the API on every request and reflected in the UI (navigation, page guards, controls).
+- **Role-based access control:** 5 roles and 13 fine-grained permissions, enforced by the API on every request and reflected in the UI (navigation, page guards, controls).
 - **User management:** paginated, searchable user list; invite users by email; edit roles; deactivate, reactivate or delete users, with "last administrator" and "not yourself" safeguards.
 - **Audit log:** append-only record of sign-ins and account administration (actor, target, before/after roles, IP); the database refuses edits and deletes, and admin changes are recorded in the same transaction.
 - **Email invitations and forgot password:** single-use, hashed, expiring links; background delivery with retries and a per-invitation delivery record; enumeration-safe reset requests.
@@ -53,11 +53,13 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 - **Operations console:** responsive Next.js dashboard with an animated preloader, toast notifications and sticky navigation.
 - **Engineering hygiene:** versioned SQL migrations, standard JSON error envelope, hot reload, and Postgres integration tests.
 
-- **Double-entry ledger:** chart of accounts with derived balances, balanced transfers, full reversals and a live zero-sum audit. The database itself rejects unbalanced journals, edits, deletes and late postings; accounts are locked in a fixed order with overdraft checks; every write is idempotent per `Idempotency-Key` and records an outbox event in the same transaction ([docs/ledger.md](docs/ledger.md)).
+- **Double-entry ledger:** chart of accounts with derived balances, balanced transfers, full reversals and a live zero-sum audit with a snapshot-consistent freshness strip. The database itself rejects unbalanced journals, edits, deletes and late postings; accounts are locked in a fixed order with overdraft checks; every write is idempotent per `Idempotency-Key` and records an outbox event in the same transaction ([docs/ledger.md](docs/ledger.md)).
+- **Transactional outbox relay:** committed events are delivered with leased claims, bounded retry/backoff, failed-event replay, health metrics and a `/system/outbox` console. Log and signed-webhook publishers are included; the webhook can bridge to a broker or consumer.
+- **Live idempotency tester:** the `/simulator` page fires five parallel posts with one key, verifies one commit plus four stored-response replays, then proves a tampered payload is rejected with `422`.
 
 **Planned** (see [ProjectFeature.md](ProjectFeature.md))
 
-- Outbox relay to a message broker, optional Redis idempotency cache.
+- Native Kafka/RabbitMQ publisher, optional Redis idempotency cache.
 - Reporting, Notification and Settlement services.
 
 ## Architecture

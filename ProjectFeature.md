@@ -309,13 +309,13 @@ All endpoints require authentication and account-level authorization. Audit, out
 - [ ] **Milestone 2**: Core Go Engine with Gin (`/api`)
   - [ ] Implement Gin middleware (Idempotency, Request Tracing, Recovery).
   - [ ] Implement deterministic lock ordering repository with PostgreSQL.
-  - [ ] Implement Transactional Outbox worker with Kafka/RabbitMQ driver.
-  - [ ] Write table-driven unit tests proving $\sum \text{Debit} - \sum \text{Credit} = 0$.
+  - [x] Implement transactional outbox worker with lease/retry/replay and a pluggable log/webhook publisher (broker bridge).
+  - [x] Write table-driven unit tests proving $\sum \text{Debit} - \sum \text{Credit} = 0$.
 - [ ] **Milestone 3**: Web Frontend (`/web`)
   - [x] Bootstrap Next.js app with TypeScript and Tailwind CSS (scaffold only).
   - [ ] Configure TanStack Query client and custom mutation hooks.
-  - [ ] Build Double-Entry Transfer Studio and Idempotency Replay Tester.
-  - [ ] Implement Real-Time Zero-Sum Verification status bar.
+  - [x] Build Double-Entry Transfer Studio and Idempotency Replay Tester.
+  - [x] Implement Real-Time Zero-Sum Verification status bar.
 - [ ] **Milestone 4**: Docker Compose & Live Demonstration Suite
   - [ ] Containerize API (`golang:alpine`) and Web (`node:alpine` / static Nginx).
   - [ ] Automated seed script with realistic Japanese banking accounts (JPY).
@@ -325,7 +325,7 @@ All endpoints require authentication and account-level authorization. Audit, out
 
 - [ ] **Milestone 5**: Extract Reporting & Audit and Notification
   - [ ] Define versioned event envelopes, OpenAPI contracts, and independent database credentials/migrations.
-  - [ ] Publish `ledger.journal_posted.v1` and `ledger.journal_reversed.v1` through the Core outbox.
+  - [x] Publish `ledger.journal_posted.v1` and `ledger.journal_reversed.v1` through the Core outbox.
   - [ ] Build Reporting projections with per-consumer inbox deduplication, replay, lag metrics, and visible freshness.
   - [ ] Build Notification delivery with stable delivery IDs, bounded retries, and failed-message replay.
   - [ ] Add independent service images, readiness checks, and optional Compose profiles; keep the default `run.ps1` API + web workflow.

@@ -4,20 +4,20 @@ All uploaded file metadata lives in **one `attachments` table**. `users.photo_at
 
 ## Local storage
 
-Image uploads are converted on the API to lossless WebP before storage. JPEG,
-PNG, GIF, BMP, TIFF and still WebP are supported; GIF animation and image alpha
-are preserved. Other image formats (including SVG/HEIC/AVIF and animated PNG or
+Image uploads are converted on the API to WebP before storage. JPEG, PNG, GIF,
+BMP, TIFF and still WebP are supported; GIF animation and image alpha are
+preserved. Other image formats (including SVG/HEIC/AVIF and animated PNG or
 animated WebP) are rejected with a validation error rather than saved unchanged.
 No external image executable or CGo library is required.
 
 Converted images use `.webp` in both the display filename and random storage key,
 with `image/webp` content type. Size and SHA-256 describe the converted bytes.
-Source and output are each limited to 10 MiB. Dimensions are limited to 10000 px
-per side and 25 megapixels; GIFs additionally allow at most 200 frames and 25
-million total canvas pixels across frames. At most two images convert concurrently.
-Existing uploaded images are not modified by new-upload conversion. Profile
-photos accept new WebP attachments and retain compatibility with older JPEG,
-PNG and GIF attachments.
+Sources are limited to 10 MiB; converted images are limited to 3 MiB and are
+scaled down as needed to fit. Dimensions are limited to 10000 px per side and 25
+megapixels; GIFs additionally allow at most 200 frames and 25 million total canvas
+pixels across frames. At most two images convert concurrently. Existing uploaded
+images are not modified by new-upload conversion. Profile photos accept new WebP
+attachments and retain compatibility with older JPEG, PNG and GIF attachments.
 
 Non-image uploads use a random 64-hex storage key plus the lowercase original extension,
 for example `<random-key>.jpg` or `<random-key>.pdf`. Extensions must contain 1–10
@@ -55,7 +55,7 @@ Every request requires the real backend bearer token and an explicit capability:
 | PUT | `/api/v1/auth/photo` | Assign an owned attachment as the current user's photo, or clear it |
 | GET | `/api/v1/auth/photo` | Read the current user's private photo bytes |
 
-Limits: one nonempty file up to **10 MiB**. Non-image attachments retain their bytes; image uploads follow the WebP conversion rules above. Downloads always use attachment disposition, `nosniff`, and restrictive content-security headers. There is no unauthenticated static uploads directory. User-photo assignment accepts WebP and legacy JPEG, PNG and GIF with valid image headers, at most 25 million pixels and at most 10000 pixels in either dimension. HTML and other general files cannot become inline profile photos. File/metadata errors do not expose storage paths or raw database details.
+Limits: one nonempty file up to **10 MiB**; images are converted to WebP and capped at **3 MiB**. Non-image attachments retain their bytes; image uploads follow the WebP conversion rules above. Downloads always use attachment disposition, `nosniff`, and restrictive content-security headers. There is no unauthenticated static uploads directory. User-photo assignment accepts WebP and legacy JPEG, PNG and GIF with valid image headers, at most 25 million pixels and at most 10000 pixels in either dimension. HTML and other general files cannot become inline profile photos. File/metadata errors do not expose storage paths or raw database details.
 
 Upload with a client that already has a token (substitute the actual API port):
 

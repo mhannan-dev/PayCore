@@ -45,7 +45,7 @@ Account, Transfer, Ledger ও Reversal একই service এবং একই dat
 - [ ] Account-specific overdraft rule ও insufficient-funds validation।
 - [ ] সব affected account ID অনুযায়ী একই ক্রমে lock করে concurrent overspending ও deadlock risk কমানো।
 - [ ] Deadlock/serialization failure-এ bounded whole-transaction retry।
-- [ ] Idempotency response, journal, postings ও outbox event একই ACID transaction-এ commit/rollback।
+- [x] Idempotency response, journal, postings ও outbox event একই ACID transaction-এ commit/rollback।
 
 ## ৪. Ledger Core Service — Reversal
 
@@ -74,12 +74,12 @@ Multi-currency মানে একাধিক currency-এর account/journal �
 
 ## ৬. Ledger Core Service — Audit ও Reliable Events
 
-- [ ] Authoritative zero-sum audit: `GET /api/v1/audit/zero-sum?currency=JPY`।
-- [ ] Consistent database snapshot-এ per-journal ও per-currency debit/credit validation।
-- [ ] Core-owned transactional outbox ও broker acknowledgment-এর পরে published marker।
-- [ ] Outbox relay retry/backoff ও failed-event replay।
-- [ ] Versioned events: `ledger.journal_posted.v1`, `ledger.journal_reversed.v1`।
-- [ ] Outbox lag/event health: `GET /api/v1/outbox/metrics`।
+- [x] Authoritative zero-sum audit: `GET /api/v1/audit/zero-sum?currency=JPY`।
+- [x] Consistent database snapshot-এ per-journal ও per-currency debit/credit validation।
+- [x] Core-owned transactional outbox ও publisher acknowledgment-এর পরে published marker।
+- [x] Outbox relay retry/backoff ও failed-event replay।
+- [x] Versioned events: `ledger.journal_posted.v1`, `ledger.journal_reversed.v1`।
+- [x] Outbox lag/event health: `GET /api/v1/outbox/metrics`।
 - [ ] Broker outage-এ durable backlog, capacity monitoring ও recovery ব্যবস্থা।
 
 ## ৭. Reporting & Audit Service
@@ -125,7 +125,7 @@ Core reserve/capture/release তৈরি হওয়ার আগে payout চ�
 
 **UI preview তৈরি আছে:** `/`, `/accounts`, `/transfers`, `/ledger`, `/audit`, `/reports`, `/notifications`, `/settlements`, `/simulator`। Shared sample data দিয়ে account/ledger filtering, posting details, transfer validation/preview, sample audit, CSV export এবং local idempotency illustration কাজ করে। Authentication ও business API integration এখনো হয়নি; নিচের checkbox-গুলো সম্পূর্ণ integrated feature-এর জন্য।
 
-- [ ] Authoritative zero-sum status, currency ও last successful audit time দেখানো।
+- [x] Authoritative zero-sum status, currency ও last successful audit time দেখানো।
 - [ ] Account detail, posting history ও ledger explorer।
 - [ ] Multiple legs দিয়ে visual transfer builder।
 - [ ] Debit/credit অসমান হলে submit বন্ধ করা; backend-এও একই validation।
@@ -145,7 +145,7 @@ Core reserve/capture/release তৈরি হওয়ার আগে payout চ�
 
 - [ ] নির্বাচিত external OIDC provider দিয়ে authentication integration।
 - [ ] প্রতিটি business endpoint-এ resource/account-level authorization।
-- [ ] Audit, outbox metrics, replay ও operator action-এর restricted permissions।
+- [x] Audit, outbox metrics, replay ও operator action-এর restricted permissions।
 - [ ] Service-to-service token-এর audience ও permission validation।
 - [ ] Sensitive information বাদ দিয়ে minimal event payload ও নিরাপদ logging।
 - [ ] প্রয়োজনীয় security/operator action-এর durable audit record।
@@ -157,7 +157,7 @@ Custom Auth service বর্তমান চার-service roadmap-এর ব�
 ### File ও attachment management
 
 - [x] সব file এবং user photo-এর metadata একটি `attachments` table-এ রাখা।
-- [x] Local `api/uploads/` folder-এ random key দিয়ে file রাখা; প্রতি file সর্বোচ্চ 10 MiB।
+- [x] Local `api/uploads/` folder-এ random key দিয়ে file রাখা; প্রতি file সর্বোচ্চ 10 MiB; image WebP-তে রূপান্তর ও সর্বোচ্চ 3 MiB।
 - [x] Authenticated upload, metadata/list, private download ও soft-delete API।
 - [x] `users.photo_attachment_id` দিয়ে নিজের image attachment photo হিসেবে link/clear করা।
 - [x] পুরোনো photo URL attachment metadata-তে migrate করা এবং ownership/database constraints যাচাই।
@@ -181,10 +181,10 @@ Endpoint ও storage ব্যবহারের বিস্তারিত: [U
 
 ## ১৩. Demo ও Verification
 
-- [ ] একই idempotency key দিয়ে পাঁচটি parallel request: একটি financial commit এবং matching replay।
-- [ ] একই key দিয়ে tampered payload পাঠিয়ে `422` দেখানো।
+- [x] একই idempotency key দিয়ে পাঁচটি parallel request: একটি financial commit এবং matching replay।
+- [x] একই key দিয়ে tampered payload পাঠিয়ে `422` দেখানো।
 - [ ] Isolated demo environment-এ fault injection; production-এ ওই control বন্ধ রাখা।
-- [ ] PostgreSQL integration tests: zero-sum, append-only, currency ও positive amount constraints।
+- [x] PostgreSQL integration tests: zero-sum, append-only, currency ও positive amount constraints।
 - [ ] Concurrency tests: overspending, duplicate posting ও simultaneous full reversal প্রতিরোধ।
 - [ ] Redis outage, rollback এবং broker acknowledgment-এর পরে relay crash পরীক্ষা।
 - [ ] Consumer বন্ধ থাকা অবস্থায় transfer commit এবং recovery-এ backlog processing পরীক্ষা।
