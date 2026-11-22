@@ -11,11 +11,16 @@ export const NAVIGATION: NavItem[] = [
   { href: "/notifications", label: "Notifications", icon: "bell" },
   { href: "/settlements", label: "Settlements", icon: "bank" },
   { href: "/simulator", label: "Request simulator", icon: "code" },
-  { href: "/profile", label: "User profile", icon: "user" },
   { href: "/security", label: "Account security", icon: "shield" },
   { href: "/admin/users", label: "Users & access", icon: "users", section: "admin" },
   { href: "/admin/roles", label: "Roles & permissions", icon: "key", section: "admin" },
   { href: "/admin/audit-log", label: "Audit log", icon: "file", section: "admin" },
+  { href: "/system/outbox", label: "Event outbox", icon: "refresh", section: "admin" },
 ];
 
-export const pageLabel = (pathname: string) => NAVIGATION.find((item) => item.href === pathname)?.label ?? "Page";
+const EXTRA_PAGE_LABELS: Record<string, string> = {
+  "/profile": "User profile",
+};
+
+export const pageLabel = (pathname: string) =>
+  EXTRA_PAGE_LABELS[pathname] ?? NAVIGATION.find((item) => item.href === pathname)?.label ?? "Page";

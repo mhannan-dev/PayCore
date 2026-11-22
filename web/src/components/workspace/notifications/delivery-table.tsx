@@ -1,48 +1,21 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
-import { Badge, Panel } from "../../ui";
+import type { NotificationDelivery } from "@/lib/ledger-api";
+import { Badge, Empty } from "../../ui";
+import { deliveryLabel } from "./delivery-state";
 
-export type Delivery = { id: string; title: string; channel: string; destination: string; status: string; time: string };
-
-const FILTERS = ["All deliveries", "Delivered", "Retry scheduled"];
-
-function DeliveryRow({ row }: { row: Delivery }) {
-  return (
-    <tr>
-      <td>
-        <strong className="cell-primary">{row.title}</strong>
-        <span className="cell-secondary mono">{row.id}</span>
-      </td>
-      <td>{row.channel}</td>
-      <td>{row.destination}</td>
-      <td><Badge tone={row.status === "Delivered" ? "green" : "amber"}>{row.status}</Badge></td>
-      <td>{row.time}</td>
-    </tr>
-  );
+export function DeliveryStatusBadge({ delivery }: { delivery: NotificationDelivery }) {
+  return <Badge tone={delivery.status === "DELIVERED" ? "green" : delivery.status === "FAILED" ? "amber" : "neutral"}>{deliveryLabel(delivery)}</Badge>;
 }
-
-export function DeliveryTable({ deliveries }: { deliveries: Delivery[] }) {
-  const [filter, setFilter] = useState(FILTERS[0]);
-  const rows = deliveries.filter((row) => filter === FILTERS[0] || row.status === filter);
-  return (
-    <Panel
-      title="Delivery history"
-      action={
-        <label>
-          <span className="sr-only">Delivery status</span>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            {FILTERS.map((f) => <option key={f}>{f}</option>)}
-          </select>
-        </label>
-      }
-    >
-      <div className="table-scroll">
-        <table>
-          <thead><tr><th>EVENT</th><th>CHANNEL</th><th>DESTINATION</th><th>STATUS</th><th>TIME (JST)</th></tr></thead>
-          <tbody>{rows.map((row) => <DeliveryRow key={row.id} row={row} />)}</tbody>
-        </table>
-      </div>
-    </Panel>
-  );
+export function DeliveryTable({ deliveries, selected, onSelect, loading }: { deliveries: NotificationDelivery[]; selected: string | null; onSelect: (id: string | null) => void; loading: boolean }) {
+  return <div className={`table-scroll${loading ? " is-refreshing" : ""}`}><table>
+    <caption className="sr-only">Sandbox notification delivery history</caption>
+    <thead><tr><th>EVENT / JOURNAL</th><th>CHANNEL / DESTINATION</th><th>STATUS</th><th>ATTEMPTS</th><th>CREATED</th><th>DETAILS</th></tr></thead>
+    <tbody>{deliveries.map((delivery) => <tr key={delivery.id}>
+      <td><strong className="cell-primary">{delivery.event_type}</strong><span className="cell-secondary mono">{delivery.payout_reference ?? delivery.journal_reference}</span></td>
+      <td>{delivery.channel}<span className="cell-secondary">{delivery.destination}</span></td>
+      <td><DeliveryStatusBadge delivery={delivery} /></td><td>{delivery.attempts}</td><td>{new Date(delivery.created_at).toLocaleString()}</td>
+      <td><button type="button" className="text-link" aria-expanded={selected === delivery.id} onClick={() => onSelect(selected === delivery.id ? null : delivery.id)}>{selected === delivery.id ? "Close" : "View delivery"}</button></td>
+    </tr>)}</tbody>
+  </table>{deliveries.length === 0 && <Empty>No matching deliveries. New journal events create sandbox email and webhook records when the outbox worker processes them.</Empty>}</div>;
 }

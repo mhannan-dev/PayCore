@@ -1,0 +1,7 @@
+﻿.notifications-page > .panel, .notifications-page > .inline-notice { margin-bottom: 24px; }
+.notifications-page .summary-list strong { min-width: 0; max-width: 70%; overflow-wrap: anywhere; text-align: right; }
+.notification-linked { padding: 20px; border-top: 1px solid var(--border); }
+.notification-linked h3 { margin: 0 0 16px; }
+.notification-links { display: flex; flex-wrap: wrap; gap: 18px; padding: 20px 24px; }
+.notification-attempts { padding: 0 24px 20px; }
+.notification-attempts li { margin-bottom: 12px; overflow-wrap: anywhere; }

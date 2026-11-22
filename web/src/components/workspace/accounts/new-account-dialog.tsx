@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { boolean, mixed, object, string, ValidationError } from "yup";
 import { AuthApiError } from "@/lib/auth-api";
@@ -33,7 +34,8 @@ export function NewAccountDialog({ onClose, onCreated }: { onClose: () => void; 
   const [accountNumber, setAccountNumber] = useState("");
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("LIABILITY");
-  const [currency, setCurrency] = useState<Currency>("JPY");
+  const { currency: workspaceCurrency } = useWorkspaceCurrency();
+  const [currency, setCurrency] = useState<Currency>(workspaceCurrency);
   const [overdraft, setOverdraft] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);

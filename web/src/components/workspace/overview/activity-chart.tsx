@@ -1,27 +1,73 @@
-import { money } from "@/lib/demo-data";
+"use client";
 
-const HOURS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00"];
-const VALUES = [500000, 300000, 0, 0, 50500, 50000];
+import type { Currency, Journal } from "@/lib/ledger-api";
+import { formatMoney } from "@/lib/money";
 
-export function ActivityChart() {
+export function ActivityChart({ currency, journals = [] }: { currency: Currency; journals?: Journal[] }) {
+  // Aggregate recent journal volumes into up to 6 chronological buckets
+  const recent = [...journals].slice(0, 6).reverse();
+
+  if (recent.length === 0) {
+    return (
+      <div className="activity-chart" role="img" aria-label="No recent transactions to display.">
+        <div className="chart-y">
+          <span>—</span>
+          <span>—</span>
+          <span>0</span>
+        </div>
+        <div className="chart-bars" style={{ alignItems: "center", justifyContent: "center" }}>
+          <span className="text-xs text-muted">No ledger transactions recorded yet</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate highest amount for relative bar heights
+  const amounts = recent.map((j) => {
+    try {
+      return BigInt(j.total);
+    } catch {
+      return BigInt(0);
+    }
+  });
+
+  let max = BigInt(1);
+  for (const amt of amounts) {
+    if (amt > max) max = amt;
+  }
+
   return (
     <div
       className="activity-chart"
       role="img"
-      aria-label="Sample hourly debit volume: 09:00 500000 yen, 10:00 300000, 11:00 and 12:00 zero, 13:00 50500, 14:00 50000."
+      aria-label={`Recent ledger volume across ${recent.length} transaction entries.`}
     >
-      <div className="chart-y"><span>500k</span><span>250k</span><span>0</span></div>
+      <div className="chart-y">
+        <span>{formatMoney(max, currency)}</span>
+        <span>{formatMoney(max / BigInt(2), currency)}</span>
+        <span>0</span>
+      </div>
       <div className="chart-bars">
-        {VALUES.map((value, i) => (
-          <div className="chart-column" key={HOURS[i]}>
-            <div className="bar-space">
-              <div className="chart-bar" style={{ height: `${Math.max(1, value / 5000)}%` }}>
-                <span>{money(BigInt(value))}</span>
+        {recent.map((j, i) => {
+          const amt = amounts[i] ?? BigInt(0);
+          const pct = Math.max(8, Number((amt * BigInt(100)) / max));
+          const time = new Date(j.posted_at).toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+
+          return (
+            <div className="chart-column" key={j.id}>
+              <div className="bar-space">
+                <div className="chart-bar" style={{ height: `${pct}%` }}>
+                  <span>{formatMoney(j.total, j.currency)}</span>
+                </div>
               </div>
+              <span>{time}</span>
             </div>
-            <span>{HOURS[i]}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

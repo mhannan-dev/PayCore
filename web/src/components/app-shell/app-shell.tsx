@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuthSession } from "@/lib/auth-session";
@@ -12,6 +13,7 @@ const PUBLIC_PATHS = new Set(["/login", "/set-password", "/forgot-password", "/r
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { currency } = useWorkspaceCurrency();
   const { session } = useAuthSession();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useSessionSync(session, pathname);
@@ -27,7 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="main-shell">
         <Topbar pathname={pathname} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((value) => !value)} />
         <DemoBanner />
-        <main id="main-content" tabIndex={-1}>{children}</main>
+        <main key={currency} id="main-content" tabIndex={-1}>{children}</main>
         <PageFooter />
       </div>
     </div>

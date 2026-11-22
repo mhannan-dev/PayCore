@@ -1,6 +1,8 @@
 // Permission codes (mirror api/internal/models/rbac.go). The API enforces them;
 // the web app uses them to hide navigation and guard pages.
 export const PERMISSIONS = {
+ notificationsRead: "notifications:read",
+ notificationsRetry: "notifications:retry",
   reconciliationMatch: "reconciliation:match",
   reconciliationRead: "reconciliation:read",
   reconciliationImport: "reconciliation:import",
@@ -16,6 +18,7 @@ export const PERMISSIONS = {
   reportsExport: "reports:export",
   simulatorRun: "simulator:run",
   systemRead: "system:read",
+  systemWrite: "system:write",
   accountsWrite: "accounts:write",
   attachmentsRead: "attachments:read",
   attachmentsWrite: "attachments:write",
@@ -28,9 +31,11 @@ export const ROLE_CODES = ["ADMIN", "OPERATOR", "LEAD_OPERATOR", "COMPLIANCE_AUD
 
 /** Permission each route needs; routes not listed are open to every signed-in user. */
 export const ROUTE_PERMISSIONS: Record<string, Permission> = {
+ "/notifications": PERMISSIONS.notificationsRead,
   "/reconciliation": PERMISSIONS.reconciliationRead,
   "/accounts": PERMISSIONS.ledgerRead,
   "/transfers": PERMISSIONS.transfersRead,
+  "/settlements": PERMISSIONS.transfersRead,
   "/ledger": PERMISSIONS.ledgerRead,
   "/audit": PERMISSIONS.auditRead,
   "/reports": PERMISSIONS.reportsRead,
@@ -38,6 +43,7 @@ export const ROUTE_PERMISSIONS: Record<string, Permission> = {
   "/admin/users": PERMISSIONS.usersRead,
   "/admin/roles": PERMISSIONS.usersRead,
   "/admin/audit-log": PERMISSIONS.auditRead,
+  "/system/outbox": PERMISSIONS.systemRead,
 };
 
 /**
@@ -67,6 +73,7 @@ export const canVisit = (permissions: readonly string[] | null, pathname: string
   hasPermission(permissions, permissionForRoute(pathname));
 
 const PERMISSION_GROUP_LABELS: Record<string, string> = {
+ notifications: "Notifications",
   reconciliation: "Reconciliation",
   users: "User management",
   transfers: "Transfers",

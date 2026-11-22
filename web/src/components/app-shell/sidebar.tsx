@@ -42,7 +42,7 @@ function SidebarFooter({ name }: { name: string }) {
     <div className="sidebar-footer">
       <Link href="/profile" className="operator" aria-label={`View profile: ${name}`} title={name}>
         <span className="operator-avatar"><UserAvatar /></span>
-        <span className="operator-details">{name}<small>View user profile</small></span>
+        <span className="operator-details">{name}</span>
       </Link>
     </div>
   );

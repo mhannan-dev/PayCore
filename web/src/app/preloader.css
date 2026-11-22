@@ -1,3 +1,5 @@
+@reference "./globals.css";
+
 /* ==========================================================================
    Global preloader (components/global-preloader.tsx)
    ========================================================================== */
@@ -54,17 +56,15 @@
   justify-content: center;
   background: linear-gradient(135deg, #1a4a35, #2f7350);
   color: #fff;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -1px;
+  @apply text-2xl font-bold tracking-tight;
   box-shadow: 0 8px 22px rgba(18, 45, 35, 0.25);
   animation: preloader-pulse 1.6s ease-in-out infinite;
 }
 .preloader-logo span { color: #c9f6a1; }
 
 .preloader-word { display: flex; align-items: baseline; gap: 8px; }
-.preloader-word strong { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: #1a382b; }
-.preloader-word span { font-size: 9px; font-weight: 700; letter-spacing: 2px; color: #8b9d88; }
+.preloader-word strong { @apply text-xl font-bold tracking-tight; color: #1a382b; }
+.preloader-word span { @apply text-xs font-bold tracking-widest text-muted; }
 
 /* Indeterminate progress bar */
 .preloader-bar { width: 160px; height: 3px; border-radius: 999px; background: #e1eadb; overflow: hidden; }

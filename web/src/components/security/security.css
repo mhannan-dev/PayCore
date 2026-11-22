@@ -1,8 +1,10 @@
+@reference "../../app/globals.css";
+
 .security-page { display: grid; gap: 24px; }
 .security-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .security-page .panel > p { color: #647568; line-height: 1.7; }
 .security-count { display: flex; align-items: baseline; gap: 10px; font-size: 38px; font-weight: 600; color: #245f43 !important; }
-.security-count span { font-size: 13px; font-weight: 400; }
+.security-count span { @apply text-control; font-weight: 400; }
 .security-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .security-codes { width: 100%; padding: 16px; border: 1px solid #d8e2d8; border-radius: 10px; font: 14px/1.9 var(--font-mono); background: #f7faf5; resize: vertical; }
 .security-sessions { margin: 0; padding: 0; list-style: none; }
@@ -10,19 +12,19 @@
 .security-sessions li:last-child { border-bottom: 0; }
 .security-session-icon { background: #edf4e8; padding: 12px; border-radius: 12px; color: #245f43; }
 .security-sessions li > div { flex: 1; min-width: 0; display: grid; gap: 7px; }
-.security-sessions li span:not(.badge):not(.security-session-icon) { color: #647568; font-size: 12px; line-height: 1.5; }
+.security-sessions li span:not(.badge):not(.security-session-icon) { color: #647568; @apply text-sm; line-height: 1.5; }
 .security-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid #dce5d9; border-radius: 20px; box-shadow: 0 24px 90px #10291b40; color: #203a2d; }
 .security-dialog::backdrop { background: #10291b99; backdrop-filter: blur(4px); }
 .security-dialog header { padding: 28px 28px 8px; text-align: center; }
-.security-dialog header h2 { margin: 18px 0 10px; font-size: 22px; }
-.security-dialog header p { color: #687b6e; line-height: 1.6; font-size: 13px; }
+.security-dialog header h2 { @apply text-xl; margin: 18px 0 10px; }
+.security-dialog header p { color: #687b6e; line-height: 1.6; @apply text-control; }
 .security-dialog-icon { display: inline-flex; padding: 16px; border-radius: 16px; background: #edf4e8; color: #245f43; }
 .security-dialog-body { padding: 18px 28px 28px; display: grid; gap: 12px; }
-.security-dialog-body label { font-size: 13px; font-weight: 600; }
+.security-dialog-body label { @apply text-control; font-weight: 600; }
 .security-dialog-body input { min-width: 0; width: 100%; border: 1px solid #d5e0d3; padding: 13px; background: #fff; }
 .security-dialog-body small { color: #687b6e; line-height: 1.6; }
 .security-dialog footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; padding: 20px 28px; background: #f6f9f3; border-top: 1px solid #e1e8dc; }
 .security-enrollment { display: grid; justify-items: center; gap: 12px; padding-bottom: 16px; }
 .security-enrollment img { max-width: 100%; height: auto; }
-.security-enrollment code { display: block; overflow-wrap: anywhere; padding-top: 12px; font-size: 13px; }
+.security-enrollment code { display: block; overflow-wrap: anywhere; padding-top: 12px; @apply text-control; }
 @media (max-width: 760px) { .security-grid { grid-template-columns: 1fr; } .security-sessions li { flex-wrap: wrap; } .security-sessions li > div { flex-basis: calc(100% - 70px); } .security-dialog footer .button { flex: 1; } }

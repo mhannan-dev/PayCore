@@ -1,54 +1,73 @@
 "use client";
 
-import { Icon } from "../../icons";
-
 import { useState } from "react";
-import { accountName, journals, money, type Journal } from "@/lib/demo-data";
+import type { Journal as ApiJournal } from "@/lib/ledger-api";
+import { formatMoney } from "@/lib/money";
+import { Icon } from "../../icons";
 import { Badge, Empty } from "../../ui";
 
-function matches(journal: Journal, query: string) {
-  const haystack = `${journal.id} ${journal.description} ${journal.category} ${journal.postings
-    .map((p) => `${p.accountId} ${accountName(p.accountId)}`)
-    .join(" ")}`;
-  return haystack.toLowerCase().includes(query.toLowerCase());
+const when = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+};
+
+function statusBadge(j: ApiJournal) {
+  if (j.reversal_for_id) return <Badge tone="amber">Reversal</Badge>;
+  if (j.reversed_by_id) return <Badge tone="neutral">Reversed</Badge>;
+  return <Badge>Posted</Badge>;
 }
 
-function PostingDetail({ journal }: { journal: Journal }) {
+function PostingDetail({ journal }: { journal: ApiJournal }) {
   return (
     <tr>
       <td colSpan={6} className="expanded-cell">
         <div className="posting-detail">
           {journal.postings.map((p) => (
-            <div key={`${p.accountId}-${p.direction}`}>
-              <span className="mono">{p.accountId}</span>
-              <strong>{accountName(p.accountId)}</strong>
+            <div key={p.id}>
+              <span className="mono">{p.account_number}</span>
+              <strong>{p.account_name}</strong>
               <Badge tone={p.direction === "DEBIT" ? "neutral" : "green"}>{p.direction}</Badge>
-              <span className="money">{money(p.amount)}</span>
+              <span className="money">{formatMoney(p.amount, journal.currency)}</span>
             </div>
           ))}
         </div>
+        <p className="footnote">
+          Journal <span className="mono">{journal.id}</span> · Ref <span className="mono">{journal.reference_id}</span>
+          {journal.created_by_email && <> · by {journal.created_by_email}</>}
+        </p>
       </td>
     </tr>
   );
 }
 
-function JournalRow({ journal: j, expanded, onToggle }: { journal: Journal; expanded: boolean; onToggle: () => void }) {
+function JournalRow({
+  journal: j,
+  expanded,
+  onToggle,
+}: {
+  journal: ApiJournal;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   return (
     <>
       <tr>
         <td>
           <strong className="cell-primary">{j.description}</strong>
-          <span className="cell-secondary mono">{j.id}</span>
+          <span className="cell-secondary mono">{j.reference_id}</span>
         </td>
-        <td>{j.category}</td>
-        <td className="money">{money(j.postings[0]?.amount ?? "0")}</td>
-        <td><Badge>Posted</Badge></td>
-        <td className="muted">{j.time}</td>
+        <td>
+          <Badge tone="neutral">{j.currency}</Badge>
+        </td>
+        <td className="money">{formatMoney(j.total, j.currency)}</td>
+        <td>{statusBadge(j)}</td>
+        <td className="muted">{when(j.posted_at)}</td>
         <td>
           <button
+            type="button"
             className="row-button"
             aria-expanded={expanded}
-            aria-label={`${expanded ? "Hide" : "View"} ${j.id} postings`}
+            aria-label={`${expanded ? "Hide" : "View"} ${j.reference_id} postings`}
             onClick={onToggle}
           >
             <Icon name={expanded ? "minus" : "plus"} size={14} />
@@ -60,21 +79,45 @@ function JournalRow({ journal: j, expanded, onToggle }: { journal: Journal; expa
   );
 }
 
-export function JournalTable({ query = "", compact = false }: { query?: string; compact?: boolean }) {
+export function JournalTable({
+  journals = [],
+  loading = false,
+  compact = false,
+}: {
+  journals?: ApiJournal[];
+  loading?: boolean;
+  compact?: boolean;
+}) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const rows = journals.filter((j) => matches(j, query));
+
+  if (loading && journals.length === 0) {
+    return (
+      <div className="table-scroll">
+        <Empty>Loading journals from ledger...</Empty>
+      </div>
+    );
+  }
+
+  const rows = compact ? journals.slice(0, 5) : journals;
+
   return (
     <div className="table-scroll">
       <table>
-        <caption className="sr-only">Sample journals; expand rows to inspect postings</caption>
+        <caption className="sr-only">Live journal entries; expand rows to inspect postings</caption>
         <thead>
           <tr>
-            <th>JOURNAL / DESCRIPTION</th><th>TYPE</th><th>AMOUNT</th><th>STATUS</th><th>TIME (JST)</th>
-            <th><span className="sr-only">Details</span></th>
+            <th>JOURNAL / REFERENCE</th>
+            <th>CURRENCY</th>
+            <th>TOTAL AMOUNT</th>
+            <th>STATUS</th>
+            <th>POSTED AT</th>
+            <th>
+              <span className="sr-only">Details</span>
+            </th>
           </tr>
         </thead>
         <tbody>
-          {rows.slice(0, compact ? 4 : rows.length).map((j) => (
+          {rows.map((j) => (
             <JournalRow
               key={j.id}
               journal={j}
@@ -84,7 +127,7 @@ export function JournalTable({ query = "", compact = false }: { query?: string; 
           ))}
         </tbody>
       </table>
-      {rows.length === 0 && <Empty>No entries match your search.</Empty>}
+      {rows.length === 0 && <Empty>No journal entries found in the ledger.</Empty>}
     </div>
   );
 }

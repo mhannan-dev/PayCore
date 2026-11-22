@@ -1,9 +1,10 @@
 "use client";
 
+import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { useState, type FormEvent } from "react";
 import { AuthApiError } from "@/lib/auth-api";
 import { useAuthSession } from "@/lib/auth-session";
-import { CURRENCIES, fetchAccounts, postTransfer, type Currency, type Journal, type LedgerAccount, type TransferInput } from "@/lib/ledger-api";
+import { CURRENCIES, fetchAccounts, postTransfer, type Journal, type LedgerAccount, type TransferInput } from "@/lib/ledger-api";
 import { formatMoney, parseMoneyInput } from "@/lib/money";
 import { notify } from "@/lib/notify";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -38,7 +39,7 @@ export function TransferStudio() {
   const { session } = useAuthSession();
   const can = usePermission();
   const allowed = can(PERMISSIONS.transfersCreate);
-  const [currency, setCurrency] = useState<Currency>("JPY");
+  const { currency, setCurrency } = useWorkspaceCurrency();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");

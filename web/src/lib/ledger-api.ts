@@ -66,7 +66,7 @@ export type TransferLeg = { account_id: string; direction: Direction; amount: st
 export type TransferInput = { reference_id: string; description: string; currency: Currency; legs: TransferLeg[] };
 
 export type AccountQuery = { q?: string; type?: AccountType | ""; currency?: Currency | ""; limit: number; offset: number };
-export type JournalQuery = { q?: string; account_id?: string; limit: number; offset: number };
+export type JournalQuery = { currency?: Currency; q?: string; account_id?: string; limit: number; offset: number };
 
 function params(values: Record<string, string | number | undefined>) {
   const p = new URLSearchParams();
@@ -86,7 +86,7 @@ export const fetchAccountPostings = (token: string, accountId: string, limit: nu
   request<Page<AccountPosting>>(`/accounts/${encodeURIComponent(accountId)}/postings?${params({ limit, offset })}`, { token });
 
 export const fetchJournals = (token: string, q: JournalQuery) =>
-  request<Page<Journal>>(`/transfers?${params({ q: q.q?.trim(), account_id: q.account_id, limit: q.limit, offset: q.offset })}`, { token });
+  request<Page<Journal>>(`/transfers?${params({ q: q.q?.trim(), account_id: q.account_id, currency: q.currency, limit: q.limit, offset: q.offset })}`, { token });
 
 /**
  * Posts a transfer. Reuse the same idempotencyKey when retrying the same
@@ -108,6 +108,26 @@ export const reverseJournal = (token: string, idempotencyKey: string, journalId:
 
 export const fetchZeroSum = (token: string, currency: Currency) =>
   request<ZeroSumReport>(`/audit/zero-sum?${params({ currency })}`, { token });
+
+// Mirrors api/internal/models/outbox.go (coding rule 4). Delivery is at-least-once:
+// a published event may be delivered again after a crash before the marker commit.
+export const OUTBOX_STATUSES = ["PENDING", "SENDING", "PUBLISHED", "FAILED"] as const;
+export type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
+export type OutboxMetrics = {
+  pending_count: number;
+  sending_count: number;
+  published_count: number;
+  failed_count: number;
+  lag_seconds: number;
+  healthy: boolean;
+  checked_at: string;
+};
+export type OutboxReplayRequest = { ids: string[] };
+export type OutboxReplayResult = { replayed_count: number };
+
+export const fetchOutboxMetrics = (token: string) => request<OutboxMetrics>("/outbox/metrics", { token });
+export const replayOutboxEvents = (token: string, input: OutboxReplayRequest) =>
+  request<OutboxReplayResult>("/outbox/replay", { token, method: "POST", body: JSON.stringify(input) });
 
 // Mirrors api/internal/models/statement.go. CSV input amounts are major units; these API
 // amounts and totals are always integer minor-unit strings.
@@ -151,3 +171,78 @@ export const configureMatching = (token: string, id: string, input: MatchingConf
   request<void>(`/reconciliation/imports/${encodeURIComponent(id)}/matching`, { token, method: "POST", body: JSON.stringify(input) });
 export const reviewStatementMatch = (token: string, id: string, row: number, input: MatchingReviewRequest) =>
   request<void>(`/reconciliation/imports/${encodeURIComponent(id)}/rows/${row}/match`, { token, method: "POST", body: JSON.stringify(input) });
+
+export type SettlementStatus = "RESERVED" | "CAPTURED" | "RELEASED";
+
+export type Settlement = {
+  id: string;
+  payout_reference: string;
+  source_account_id: string;
+  source_account_name: string;
+  clearing_account_id: string;
+  clearing_account_name: string;
+  destination_account_id: string | null;
+  amount: string;
+  currency: Currency;
+  status: SettlementStatus;
+  provider_mode: "SANDBOX" | "LIVE";
+  provider_reference: string;
+  beneficiary_name: string;
+  beneficiary_bank: string;
+  beneficiary_account: string;
+  created_by: string | null;
+  reserve_journal_id: string;
+  capture_journal_id: string | null;
+  release_journal_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreatePayoutRequest = {
+  source_account_id: string;
+  amount: string;
+  currency: Currency;
+  beneficiary_name: string;
+  beneficiary_bank: string;
+  beneficiary_account: string;
+};
+
+export const fetchSettlements = (token: string, q: { currency?: Currency; limit?: number; offset?: number } = {}) =>
+  request<Page<Settlement>>(`/settlements?${params({ currency: q.currency, limit: q.limit ?? 25, offset: q.offset ?? 0 })}`, { token });
+
+export const fetchSettlement = (token: string, id: string) =>
+  request<Settlement>(`/settlements/${encodeURIComponent(id)}`, { token });
+
+export const createPayout = (token: string, key: string, input: CreatePayoutRequest) =>
+  request<Settlement>("/settlements", { token, method: "POST", body: JSON.stringify(input), headers: { "Idempotency-Key": key }, timeoutMs: 20000 });
+
+export const capturePayout = (token: string, key: string, id: string) =>
+  request<Settlement>(`/settlements/${encodeURIComponent(id)}/capture`, { token, method: "POST", headers: { "Idempotency-Key": key }, timeoutMs: 20000 });
+
+export const releasePayout = (token: string, key: string, id: string) =>
+  request<Settlement>(`/settlements/${encodeURIComponent(id)}/release`, { token, method: "POST", headers: { "Idempotency-Key": key }, timeoutMs: 20000 });
+
+export const fetchJournal = (token: string, id: string) => request<Journal>(`/transfers/${encodeURIComponent(id)}`, { token });
+
+// Notification contracts mirror api/internal/models/notification.go. Receipts are sandbox-only.
+export const DELIVERY_STATUSES = ["PENDING", "DELIVERED", "FAILED"] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+export const DELIVERY_CHANNELS = ["EMAIL", "WEBHOOK"] as const;
+export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
+export type NotificationDelivery = {
+ id: string; event_id: string; event_type: string; journal_id: string; journal_reference: string;
+ currency: Currency; settlement_id: string | null; payout_reference: string | null;
+ channel: DeliveryChannel; destination: string; status: DeliveryStatus; dispatch_status: OutboxStatus;
+ attempts: number; last_error: string | null; receipt: string | null; delivered_at: string | null;
+ next_attempt_at: string | null; can_retry: boolean; created_at: string;
+};
+export type DeliveryAttempt = { attempt: number; status: DeliveryStatus; receipt: string | null; error: string | null; occurred_at: string };
+export type DeliveryDetail = { delivery: NotificationDelivery; attempts: DeliveryAttempt[] };
+export type DeliveryMetrics = { pending: number; delivered: number; failed: number };
+export type RetryDeliveryRequest = { attempts: number };
+export type RetryDeliveryResult = { queued: boolean };
+export type DeliveryQuery = { currency: Currency; status?: DeliveryStatus | ""; channel?: DeliveryChannel | ""; limit: number; offset: number };
+export const fetchNotifications = (token: string, q: DeliveryQuery) => request<Page<NotificationDelivery>>(`/notifications?${params(q)}`, { token });
+export const fetchNotification = (token: string, id: string) => request<DeliveryDetail>(`/notifications/${encodeURIComponent(id)}`, { token });
+export const fetchNotificationMetrics = (token: string, currency: Currency) => request<DeliveryMetrics>(`/notifications/metrics?${params({currency})}`, { token });
+export const retryNotification = (token: string, id: string, input: RetryDeliveryRequest) => request<RetryDeliveryResult>(`/notifications/${encodeURIComponent(id)}/retry`, { token, method: "POST", body: JSON.stringify(input) });

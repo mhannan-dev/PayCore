@@ -38,6 +38,8 @@ const ACTION_INFO: Record<AuditAction, { label: string; tone: BadgeTone }> = {
   statement_exception_noted: { label: "Exception noted", tone: "neutral" },
   statement_imported: { label: "Statement imported", tone: "neutral" },
   sessions_revoked: { label: "Sessions revoked", tone: "neutral" },
+  notification_retry: { label: "Notification retried", tone: "amber" },
+  outbox_replay: { label: "Outbox events replayed", tone: "amber" },
 };
 
 const FAILURE_REASONS: Record<string, string> = {
@@ -70,6 +72,8 @@ function summary(e: AuditEvent): string {
     case "statement_exception_noted": return e.details.reason ?? "";
     case "statement_imported": return `${e.details.count ?? 0} statement rows imported`;
     case "sessions_revoked": return `${e.details.count ?? 0} sessions revoked`;
+    case "notification_retry": return e.details.reason ?? "Notification queued for retry";
+    case "outbox_replay": return `${e.details.count ?? 0} failed events queued for replay`;
     case "mfa_failed": return e.details.reason === "security_verification_failed" ? "Account security verification failed" : "Verification rejected";
     default:
       return "";

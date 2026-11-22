@@ -4,7 +4,7 @@ import { IdempotencySandbox } from "./idempotency-sandbox";
 export function Simulator() {
   return (
     <>
-      <Heading eyebrow="LOCAL DEMONSTRATION" title="One intent. One movement." description="Explore request deduplication before connecting the backend API." />
+      <Heading eyebrow="LIVE LEDGER DEMO" title="One intent. One movement." description="Fire parallel transfers with one Idempotency-Key, then tamper with the payload and watch the real ledger reject it." />
       <IdempotencySandbox />
     </>
   );

@@ -232,6 +232,7 @@ export const AUDIT_ACTIONS = [
   "password_reset_requested", "password_reset_completed",
   "mfa_enrolled", "mfa_verified", "mfa_failed", "mfa_recovery_used",
   "mfa_recovery_regenerated", "mfa_replacement_started", "mfa_replaced", "sessions_revoked", "statement_imported", "statement_matching_configured","statement_match_confirmed","statement_match_rejected","statement_match_reset","statement_exception_noted",
+  "outbox_replay", "notification_retry",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditEvent = {

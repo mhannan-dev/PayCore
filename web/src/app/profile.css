@@ -1,3 +1,5 @@
+@reference "./globals.css";
+
 /* ==========================================================================
    User avatar (shared: sidebar, top bar, profile)
    UserAvatar renders initials or an <img class="avatar-photo"> inside a sized container.
@@ -11,7 +13,7 @@
    Profile page (/profile) — classes prefixed pf-
    ========================================================================== */
 .pf-page { display: flex; flex-direction: column; gap: 24px; }
-.pf-muted { font-size: 11px; color: var(--muted); }
+.pf-muted { @apply text-sm; color: var(--muted); }
 
 /* --- Header card ---------------------------------------------------------- */
 .pf-hero { position: relative; }
@@ -71,12 +73,12 @@
 .pf-camera:disabled { opacity: 0.6; cursor: progress; transform: none; }
 
 .pf-identity { min-width: 0; padding-bottom: 4px; }
-.pf-identity h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; color: #1a382b; margin: 0 0 6px; overflow-wrap: anywhere; }
-.pf-email { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 0 12px; overflow-wrap: anywhere; }
+.pf-identity h2 { @apply text-[1.375rem] font-semibold tracking-tight; color: #1a382b; margin: 0 0 6px; overflow-wrap: anywhere; }
+.pf-email { display: flex; align-items: center; gap: 6px; @apply text-control; color: var(--muted); margin: 0 0 12px; overflow-wrap: anywhere; }
 .pf-email svg { flex-shrink: 0; }
 
 .pf-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
-.pf-chip { font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #edf5e6; color: #2d5e3a; border: 1px solid #d6e6cc; }
+.pf-chip { @apply text-2xs; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #edf5e6; color: #2d5e3a; border: 1px solid #d6e6cc; }
 .pf-chip.is-admin { background: #fdf3e2; color: #8d641c; border-color: #f0dfbd; }
 
 /* padding-top keeps the buttons below the cover band (.pf-hero-body overlaps it by 52px). */
@@ -86,14 +88,14 @@
 .pf-btn-danger { background: #fff; color: #ad463a; border-color: #f0d4cf; }
 .pf-btn-danger:hover:not(:disabled) { background: #fff1ec; }
 .pf-btn:disabled { opacity: 0.6; cursor: progress; }
-.pf-hint { font-size: 10px; color: #8b9d88; }
+.pf-hint { @apply text-2xs; color: #8b9d88; }
 
 /* --- Cards below ----------------------------------------------------------- */
 .pf-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 24px; align-items: start; }
 
 .pf-form { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
 .pf-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.pf-field { display: flex; flex-direction: column; gap: 8px; font-size: 11px; font-weight: 600; color: #314d3a; }
+.pf-field { display: flex; flex-direction: column; gap: 8px; @apply text-sm; font-weight: 600; color: #314d3a; }
 .pf-field > span { display: flex; align-items: baseline; gap: 6px; }
 .pf-field em { color: #ad463a; font-style: normal; }
 .pf-field small { font-weight: 400; color: #8b9d88; }
@@ -111,7 +113,7 @@
   overflow-wrap: anywhere;
 }
 .pf-readonly svg { flex-shrink: 0; color: #8b9d88; }
-.pf-help { font-size: 10px; font-weight: 400; color: #8b9d88; }
+.pf-help { @apply text-2xs; font-weight: 400; color: #8b9d88; }
 
 .pf-form-footer {
   display: flex;
@@ -133,8 +135,8 @@
 .pf-row:last-child { border-bottom: none; }
 .pf-row-icon { width: 32px; height: 32px; border-radius: 8px; background: #f1f6ec; color: #477142; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .pf-row-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.pf-row-label { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #8b9d88; }
-.pf-row-value { font-size: 12px; color: #203e2c; font-weight: 500; }
+.pf-row-label { @apply text-2xs; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: #8b9d88; }
+.pf-row-value { @apply text-control; color: #203e2c; font-weight: 500; }
 
 /* --- Responsive ---------------------------------------------------------- */
 @media (max-width: 1100px) {
@@ -151,4 +153,4 @@
   .pf-form-actions .button { flex: 1; }
 }
 .pf-perms { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
-.pf-perms code { display: inline-block; font-size: 10px; padding: 3px 7px; border-radius: 5px; background: #f8faf5; border: 1px solid #e1e8dc; color: #3d5c44; }
+.pf-perms code { display: inline-block; @apply text-2xs; padding: 3px 7px; border-radius: 5px; background: #f8faf5; border: 1px solid #e1e8dc; color: #3d5c44; }

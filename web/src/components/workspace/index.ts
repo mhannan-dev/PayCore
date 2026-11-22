@@ -8,4 +8,5 @@ export { Overview } from "./overview/overview";
 export { Reports } from "./reports/reports";
 export { Settlements } from "./settlements/settlements";
 export { Simulator } from "./simulator/simulator";
+export { Outbox } from "./system/outbox";
 export { Transfers } from "./transfers/transfers";

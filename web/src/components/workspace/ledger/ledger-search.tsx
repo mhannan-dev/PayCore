@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { useEffect, useState } from "react";
 import { useAuthSession } from "@/lib/auth-session";
 import { fetchJournals, reverseJournal, type Journal } from "@/lib/ledger-api";
@@ -53,6 +54,7 @@ function Postings({ journal }: { journal: Journal }) {
 }
 
 export function LedgerSearch() {
+  const { currency } = useWorkspaceCurrency();
   const { session } = useAuthSession();
   const can = usePermission();
   const canReverse = can(PERMISSIONS.transfersReverse);
@@ -67,7 +69,7 @@ export function LedgerSearch() {
     return () => window.clearTimeout(t);
   }, [query]);
 
-  const list = useApi(JSON.stringify([search, page, version]), (token) => fetchJournals(token, { q: search, limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
+  const list = useApi(JSON.stringify([currency, search, page, version]), (token) => fetchJournals(token, { currency, q: search, limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
   const rows = list.data?.items ?? [];
   const total = list.data?.total ?? 0;
 

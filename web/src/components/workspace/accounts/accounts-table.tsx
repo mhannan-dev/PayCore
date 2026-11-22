@@ -1,7 +1,8 @@
 "use client";
 
+import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { useEffect, useState } from "react";
-import { ACCOUNT_TYPES, CURRENCIES, fetchAccounts, type AccountType, type Currency, type LedgerAccount } from "@/lib/ledger-api";
+import { ACCOUNT_TYPES, CURRENCIES, fetchAccounts, type AccountType, type LedgerAccount } from "@/lib/ledger-api";
 import { formatMoney } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
 import { usePermission } from "../../can";
@@ -24,19 +25,20 @@ function useDebounced(value: string, ms = 300) {
   return debounced;
 }
 
-/** Totals of JPY balances by account type (up to 200 accounts). */
+/** Totals of selected currency balances by account type (up to 200 accounts). */
 function AccountStats({ version }: { version: number }) {
-  const stats = useApi(`stats#${version}`, (token) => fetchAccounts(token, { currency: "JPY", limit: 200, offset: 0 }));
+  const { currency } = useWorkspaceCurrency();
+  const stats = useApi(`stats-${currency}#${version}`, (token) => fetchAccounts(token, { currency, limit: 200, offset: 0 }));
   const sum = (type: AccountType) =>
     (stats.data?.items ?? []).filter((a) => a.type === type).reduce((s, a) => s + BigInt(a.balance), BigInt(0));
-  const value = (type: AccountType) => (stats.data ? formatMoney(sum(type), "JPY") : "…");
+  const value = (type: AccountType) => (stats.data ? formatMoney(sum(type), currency) : "…");
   return (
     <StatGrid
       three
       stats={[
-        { label: "Assets", value: value("ASSET"), foot: "JPY · e.g. operating bank", icon: "bank" },
-        { label: "Liabilities", value: value("LIABILITY"), foot: "JPY · customer wallets, clearing", icon: "wallet" },
-        { label: "Revenue", value: value("REVENUE"), foot: "JPY · fees earned", icon: "chart" },
+        { label: "Assets", value: value("ASSET"), foot: `${currency} · e.g. operating bank`, icon: "bank" },
+        { label: "Liabilities", value: value("LIABILITY"), foot: `${currency} · customer wallets, clearing`, icon: "wallet" },
+        { label: "Revenue", value: value("REVENUE"), foot: `${currency} · fees earned`, icon: "chart" },
       ]}
     />
   );
@@ -71,7 +73,7 @@ export function AccountsPage() {
   const [query, setQuery] = useState("");
   const search = useDebounced(query);
   const [type, setType] = useState<AccountType | "">("");
-  const [currency, setCurrency] = useState<Currency | "">("");
+  const { currency, setCurrency } = useWorkspaceCurrency();
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<LedgerAccount | null>(null);
   const [creating, setCreating] = useState(false);
@@ -108,8 +110,7 @@ export function AccountsPage() {
           </label>
           <label>
             <span className="sr-only">Currency</span>
-            <select value={currency} onChange={(e) => { setCurrency(CURRENCIES.find((c) => c === e.target.value) ?? ""); setPage(0); }}>
-              <option value="">All currencies</option>
+            <select value={currency} onChange={(e) => { setCurrency(CURRENCIES.find((c) => c === e.target.value) ?? currency); setPage(0); }}>
               {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>

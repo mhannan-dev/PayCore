@@ -11,8 +11,9 @@ type Result<T> = { key: string; data?: T; error?: string; status?: number };
  * encodes the query, e.g. JSON of the filters). The previous data stays visible
  * while the next request runs. `load` may be a new closure every render; only a
  * new `key` (or reload()) sends a request, using the `load` of that render.
+ * A positive `pollMs` refreshes on that interval without changing the key.
  */
-export function useApi<T>(key: string, load: (token: string) => Promise<T>) {
+export function useApi<T>(key: string, load: (token: string) => Promise<T>, pollMs = 0) {
   const { session } = useAuthSession();
   const token = session.token;
   const [version, setVersion] = useState(0);
@@ -37,6 +38,12 @@ export function useApi<T>(key: string, load: (token: string) => Promise<T>) {
     // and `load` is a new closure every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, requestKey]);
+
+  useEffect(() => {
+    if (!token || pollMs <= 0) return;
+    const interval = window.setInterval(() => setVersion((v) => v + 1), pollMs);
+    return () => window.clearInterval(interval);
+  }, [token, pollMs]);
 
   const fresh = result?.key === requestKey;
   return {

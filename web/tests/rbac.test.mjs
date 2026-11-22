@@ -33,3 +33,10 @@ test("reconciliation is permission protected", () => {
   assert.equal(rbac.hasPermission(["reconciliation:read"], rbac.PERMISSIONS.reconciliationMatch), false);
   assert.equal(rbac.hasPermission(["reconciliation:match"], rbac.PERMISSIONS.reconciliationMatch), true);
 });
+
+test("notification history and retries use separate capabilities", () => {
+ assert.equal(rbac.canVisit(null, "/notifications"), false);
+ assert.equal(rbac.canVisit(["notifications:read"], "/notifications"), true);
+ assert.equal(rbac.hasPermission(["notifications:read"], rbac.PERMISSIONS.notificationsRetry), false);
+ assert.equal(rbac.hasPermission(["notifications:retry"], rbac.PERMISSIONS.notificationsRetry), true);
+});
