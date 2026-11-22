@@ -34,8 +34,8 @@ type fakeSettlementStore struct {
 func newFakeSettlementStore() *fakeSettlementStore {
 	return &fakeSettlementStore{items: map[string]models.Settlement{}, records: map[string]payoutRecord{}, accounts: []models.Account{
 		{ID: sourceID, AccountNumber: "2002", Name: "Customer wallet", Type: models.AccountLiability, Currency: models.CurrencyJPY, IsActive: true},
-		{ID: clearingID, AccountNumber: "2003", Name: "Payout clearing", Type: models.AccountLiability, Currency: models.CurrencyJPY, IsActive: true},
-		{ID: bankID, AccountNumber: "1001", Name: "Operating bank", Type: models.AccountAsset, Currency: models.CurrencyJPY, IsActive: true},
+		{ID: clearingID, AccountNumber: "2003", Name: "Payout clearing", Type: models.AccountLiability, Currency: models.CurrencyJPY, IsActive: true, SystemRole: systemRole(models.RolePayoutClearing)},
+		{ID: bankID, AccountNumber: "1001", Name: "Operating bank", Type: models.AccountAsset, Currency: models.CurrencyJPY, IsActive: true, SystemRole: systemRole(models.RoleOperatingBank)},
 	}}
 }
 func (s *fakeSettlementStore) GetByID(_ context.Context, id string) (models.Settlement, error) {
@@ -212,6 +212,40 @@ func TestSettlementCompetingActions(t *testing.T) {
 		t.Fatalf("competing transitions: %d successes, %d journals", successes, len(store.journals))
 	}
 }
+func systemRole(r models.AccountSystemRole) *models.AccountSystemRole { return &r }
+
+// Payout accounts are chosen by system role, never by number or name.
+func TestSettlementSelectsAccountsBySystemRole(t *testing.T) {
+	ctx := context.Background()
+	actor := models.UserDTO{ID: "actor"}
+	store := newFakeSettlementStore()
+	// Renaming and renumbering the role holders must not matter.
+	store.accounts[1].Name, store.accounts[1].AccountNumber = "Reserved funds", "2999"
+	store.accounts[2].Name, store.accounts[2].AccountNumber = "Treasury", "1999"
+	// A look-alike without a role is an ordinary account, never a payout account.
+	store.accounts = append(store.accounts,
+		models.Account{ID: "77777777-7777-4777-8777-777777777777", AccountNumber: "2003", Name: "Old clearing", Type: models.AccountLiability, Currency: models.CurrencyJPY, IsActive: true},
+		models.Account{ID: "88888888-8888-4888-8888-888888888888", AccountNumber: "1001", Name: "Old bank", Type: models.AccountAsset, Currency: models.CurrencyJPY, IsActive: true})
+	svc := services.NewSettlementService(store)
+	result, err := svc.Reserve(ctx, actor, "reserve-key", payoutRequest())
+	payout := payoutResult(t, result, err)
+	if payout.ClearingAccountID != clearingID {
+		t.Fatalf("clearing %s, want role holder %s", payout.ClearingAccountID, clearingID)
+	}
+	result, err = svc.Capture(ctx, actor, "capture-key", payout.ID)
+	captured := payoutResult(t, result, err)
+	if captured.DestinationAccountID == nil || *captured.DestinationAccountID != bankID {
+		t.Fatalf("destination %v, want role holder %s", captured.DestinationAccountID, bankID)
+	}
+
+	// Without role holders the payout is refused rather than guessed.
+	missing := newFakeSettlementStore()
+	missing.accounts[1].SystemRole, missing.accounts[2].SystemRole = nil, nil
+	if _, err := services.NewSettlementService(missing).Reserve(ctx, actor, "reserve-key", payoutRequest()); !errors.Is(err, models.ErrPayoutClearing) {
+		t.Fatalf("reserve without clearing role: %v", err)
+	}
+}
+
 func TestSettlementRejectsInvalidSources(t *testing.T) {
 	for _, id := range []string{clearingID, bankID, "66666666-6666-4666-8666-666666666666"} {
 		store := newFakeSettlementStore()

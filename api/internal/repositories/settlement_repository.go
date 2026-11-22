@@ -76,7 +76,7 @@ func (w *settlementWriter) GetSettlement(ctx context.Context, id string) (models
 	return scanSettlement(w.tx.QueryRow(ctx, "SELECT "+settlementColumns+settlementFrom+" WHERE s.id = $1 FOR UPDATE OF s", id))
 }
 func (w *settlementWriter) Accounts(ctx context.Context, currency models.Currency) ([]models.Account, error) {
-	rows, err := w.tx.Query(ctx, `SELECT id, account_number, name, type, currency, is_active FROM accounts WHERE currency = $1 ORDER BY account_number`, string(currency))
+	rows, err := w.tx.Query(ctx, `SELECT id, account_number, name, type, currency, is_active, system_role FROM accounts WHERE currency = $1 ORDER BY account_number`, string(currency))
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +84,11 @@ func (w *settlementWriter) Accounts(ctx context.Context, currency models.Currenc
 	accounts := []models.Account{}
 	for rows.Next() {
 		var a models.Account
-		if err := rows.Scan(&a.ID, &a.AccountNumber, &a.Name, &a.Type, &a.Currency, &a.IsActive); err != nil {
+		var role *string
+		if err := rows.Scan(&a.ID, &a.AccountNumber, &a.Name, &a.Type, &a.Currency, &a.IsActive, &role); err != nil {
 			return nil, err
 		}
+		a.SystemRole = systemRole(role)
 		accounts = append(accounts, a)
 	}
 	return accounts, rows.Err()

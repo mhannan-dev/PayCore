@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"paycore/api/internal/models"
@@ -33,13 +32,9 @@ func newSettlementID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
 }
 
-// isClearing and isOperatingBank identify the payout accounts by number or name
-// (see docs/ledger.md, "Sandbox payouts").
-func isClearing(a models.Account) bool {
-	return a.Type == models.AccountLiability && (a.AccountNumber == "2003" || strings.Contains(strings.ToLower(a.Name), "clearing"))
-}
-func isOperatingBank(a models.Account) bool {
-	return a.Type == models.AccountAsset && (a.AccountNumber == "1001" || strings.Contains(strings.ToLower(a.Name), "bank"))
+// holdsSystemRole reports whether a is active and holds the given system role (migration 024).
+func holdsSystemRole(a models.Account, role models.AccountSystemRole) bool {
+	return a.IsActive && a.SystemRole != nil && *a.SystemRole == role
 }
 
 // findAccount returns the first account matching match, or missing if none does.
@@ -83,10 +78,11 @@ func (s *SettlementService) Reserve(ctx context.Context, actor models.UserDTO, k
 			return 0, nil, err
 		}
 		source, err := findAccount(accounts, models.ErrPayoutSource, func(a models.Account) bool { return a.ID == req.SourceAccountID })
-		if err != nil || !source.IsActive || source.Type != models.AccountLiability || isClearing(source) {
+		// A source is an ordinary customer wallet: never a system account.
+		if err != nil || !source.IsActive || source.Type != models.AccountLiability || source.SystemRole != nil {
 			return 0, nil, models.ErrPayoutSource
 		}
-		clearing, err := findAccount(accounts, models.ErrPayoutClearing, func(a models.Account) bool { return a.IsActive && isClearing(a) })
+		clearing, err := findAccount(accounts, models.ErrPayoutClearing, func(a models.Account) bool { return holdsSystemRole(a, models.RolePayoutClearing) })
 		if err != nil {
 			return 0, nil, err
 		}
@@ -148,7 +144,7 @@ func (s *SettlementService) transition(ctx context.Context, actor models.UserDTO
 			if err != nil {
 				return 0, nil, err
 			}
-			bank, err := findAccount(accounts, models.ErrPayoutBank, func(a models.Account) bool { return a.IsActive && isOperatingBank(a) })
+			bank, err := findAccount(accounts, models.ErrPayoutBank, func(a models.Account) bool { return holdsSystemRole(a, models.RoleOperatingBank) })
 			if err != nil {
 				return 0, nil, err
 			}

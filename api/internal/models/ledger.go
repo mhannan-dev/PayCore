@@ -71,6 +71,27 @@ func (t AccountType) Valid() bool {
 // Liabilities, equity and revenue are credit-normal.
 func (t AccountType) DebitNormal() bool { return t == AccountAsset || t == AccountExpense }
 
+// AccountSystemRole marks the account a workflow uses for a fixed purpose.
+// Each role is held by at most one account per currency (migration 024).
+type AccountSystemRole string
+
+const (
+	RolePayoutClearing AccountSystemRole = "PAYOUT_CLEARING" // LIABILITY holding reserved payouts.
+	RoleOperatingBank  AccountSystemRole = "OPERATING_BANK"  // ASSET receiving captured payouts.
+)
+
+// AccountType returns the only account type that may hold the role, or "" for an unknown role.
+func (r AccountSystemRole) AccountType() AccountType {
+	switch r {
+	case RolePayoutClearing:
+		return AccountLiability
+	case RoleOperatingBank:
+		return AccountAsset
+	default:
+		return ""
+	}
+}
+
 // Direction is the side of a posting.
 type Direction string
 
@@ -135,8 +156,10 @@ type Account struct {
 	Currency         Currency    `json:"currency"`
 	OverdraftAllowed bool        `json:"overdraft_allowed"`
 	IsActive         bool        `json:"is_active"`
-	Balance          string      `json:"balance"`
-	CreatedAt        time.Time   `json:"created_at"`
+	// SystemRole is null for ordinary accounts.
+	SystemRole *AccountSystemRole `json:"system_role"`
+	Balance    string             `json:"balance"`
+	CreatedAt  time.Time          `json:"created_at"`
 }
 
 // Posting is one debit or credit line of a journal.
@@ -194,6 +217,8 @@ type CreateAccountRequest struct {
 	Type             AccountType `json:"type"`
 	Currency         Currency    `json:"currency"`
 	OverdraftAllowed bool        `json:"overdraft_allowed"`
+	// SystemRole is optional; null or "" creates an ordinary account.
+	SystemRole *AccountSystemRole `json:"system_role"`
 }
 
 // Normalize trims and validates the request.
@@ -211,6 +236,19 @@ func (r *CreateAccountRequest) Normalize() error {
 		return invalid("invalid_account", "type must be ASSET, LIABILITY, EQUITY, REVENUE or EXPENSE.")
 	case !r.Currency.Valid():
 		return invalid("invalid_account", "currency must be JPY, USD or EUR.")
+	}
+	if r.SystemRole != nil {
+		role := AccountSystemRole(strings.ToUpper(strings.TrimSpace(string(*r.SystemRole))))
+		switch {
+		case role == "":
+			r.SystemRole = nil
+		case role.AccountType() == "":
+			return invalid("invalid_account", "system_role must be PAYOUT_CLEARING, OPERATING_BANK or null.")
+		case role.AccountType() != r.Type:
+			return invalid("invalid_account", "PAYOUT_CLEARING requires a LIABILITY account and OPERATING_BANK an ASSET account.")
+		default:
+			r.SystemRole = &role
+		}
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ var (
 	ErrAccountNotFound     = fmt.Errorf("account not found: %w", pgx.ErrNoRows)
 	ErrJournalNotFound     = fmt.Errorf("journal not found: %w", pgx.ErrNoRows)
 	ErrAccountNumberTaken  = errors.New("account number already exists")
+	ErrSystemRoleTaken     = errors.New("system role already assigned for this currency")
 	ErrAccountInactive     = errors.New("account is inactive")
 	ErrCurrencyMismatch    = errors.New("account currency does not match the journal currency")
 	ErrAlreadyReversed     = errors.New("journal has already been reversed")
@@ -51,32 +52,45 @@ type LedgerRepository struct{ pool *pgxpool.Pool }
 func NewLedgerRepository(pool *pgxpool.Pool) *LedgerRepository { return &LedgerRepository{pool: pool} }
 
 // accountColumns selects an account with its derived balance (normal direction).
-const accountColumns = `a.id, a.account_number, a.name, a.type, a.currency, a.overdraft_allowed, a.is_active, a.created_at,
+const accountColumns = `a.id, a.account_number, a.name, a.type, a.currency, a.overdraft_allowed, a.is_active, a.system_role, a.created_at,
 	((CASE WHEN a.type IN ('ASSET', 'EXPENSE') THEN 1 ELSE -1 END) *
 	  COALESCE((SELECT SUM(CASE p.direction WHEN 'DEBIT' THEN p.amount ELSE -p.amount END)
 	            FROM ledger_postings p WHERE p.account_id = a.id), 0))::text`
 
 func scanAccount(row pgx.Row) (a models.Account, err error) {
 	var typ, currency string
-	err = row.Scan(&a.ID, &a.AccountNumber, &a.Name, &typ, &currency, &a.OverdraftAllowed, &a.IsActive, &a.CreatedAt, &a.Balance)
-	a.Type, a.Currency = models.AccountType(typ), models.Currency(currency)
+	var role *string
+	err = row.Scan(&a.ID, &a.AccountNumber, &a.Name, &typ, &currency, &a.OverdraftAllowed, &a.IsActive, &role, &a.CreatedAt, &a.Balance)
+	a.Type, a.Currency, a.SystemRole = models.AccountType(typ), models.Currency(currency), systemRole(role)
 	return
 }
 
 // CreateAccount adds an account; createdBy may be "".
 func (r *LedgerRepository) CreateAccount(ctx context.Context, req models.CreateAccountRequest, createdBy string) (models.Account, error) {
 	var id string
-	err := r.pool.QueryRow(ctx, `INSERT INTO accounts (account_number, name, type, currency, overdraft_allowed, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-		req.AccountNumber, req.Name, string(req.Type), string(req.Currency), req.OverdraftAllowed, nullableUUID(createdBy)).Scan(&id)
+	err := r.pool.QueryRow(ctx, `INSERT INTO accounts (account_number, name, type, currency, overdraft_allowed, system_role, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		req.AccountNumber, req.Name, string(req.Type), string(req.Currency), req.OverdraftAllowed, req.SystemRole, nullableUUID(createdBy)).Scan(&id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if pgErr.ConstraintName == "accounts_currency_system_role_key" {
+			return models.Account{}, ErrSystemRoleTaken
+		}
 		return models.Account{}, ErrAccountNumberTaken
 	}
 	if err != nil {
 		return models.Account{}, err
 	}
 	return r.GetAccount(ctx, id)
+}
+
+// systemRole converts a nullable system_role column.
+func systemRole(raw *string) *models.AccountSystemRole {
+	if raw == nil {
+		return nil
+	}
+	role := models.AccountSystemRole(*raw)
+	return &role
 }
 
 // GetAccount returns one account with its balance.

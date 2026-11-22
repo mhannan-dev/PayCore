@@ -18,8 +18,13 @@ func TestSettlementAtomicLifecycle(t *testing.T) {
 	if _, err := f.pool.Exec(ctx, `INSERT INTO users(id, first_name, email, password_hash) VALUES ($1, 'Payout tester', 'payout@example.test', 'not-a-login-hash')`, f.actor.ID); err != nil {
 		t.Fatal(err)
 	}
-	clearing, err := f.svc.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{AccountNumber: "2003", Name: "Payout clearing", Type: models.AccountLiability, Currency: models.CurrencyJPY})
+	clearingRole := models.RolePayoutClearing
+	clearing, err := f.svc.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{AccountNumber: "2003", Name: "Payout clearing", Type: models.AccountLiability, Currency: models.CurrencyJPY, SystemRole: &clearingRole})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// The shared fixture's bank has no role; capture needs one.
+	if _, err := f.pool.Exec(ctx, `UPDATE accounts SET system_role = 'OPERATING_BANK' WHERE id = $1`, f.bank.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.svc.Transfer(ctx, f.actor, f.key(), transfer("FUND-PAYOUT", f.bank, f.alice, 1000)); err != nil {
@@ -99,5 +104,33 @@ func TestSettlementAtomicLifecycle(t *testing.T) {
 	}
 	if journalCount != before+1 {
 		t.Fatalf("competing actions posted %d journals", journalCount-before)
+	}
+}
+
+// The database keeps one role holder per currency and ties each role to an account type.
+func TestAccountSystemRoleConstraints(t *testing.T) {
+	f := newLedgerFixture(t)
+	ctx := context.Background()
+	clearing := models.RolePayoutClearing
+	create := func(number string, currency models.Currency) error {
+		_, err := f.svc.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{AccountNumber: number, Name: "Clearing " + number, Type: models.AccountLiability, Currency: currency, SystemRole: &clearing})
+		return err
+	}
+	if err := create("2003", models.CurrencyJPY); err != nil {
+		t.Fatal(err)
+	}
+	if err := create("2004", models.CurrencyJPY); !errors.Is(err, repositories.ErrSystemRoleTaken) {
+		t.Fatalf("second JPY clearing account: %v", err)
+	}
+	if err := create("2005", models.CurrencyUSD); err != nil {
+		t.Fatalf("USD clearing account: %v", err)
+	}
+	account, err := f.svc.Account(ctx, f.alice.ID)
+	if err != nil || account.SystemRole != nil {
+		t.Fatalf("ordinary account role = %v, err %v", account.SystemRole, err)
+	}
+	// Bypassing the application cannot give a role to the wrong account type.
+	if _, err := f.pool.Exec(ctx, `UPDATE accounts SET system_role = 'OPERATING_BANK' WHERE id = $1`, f.alice.ID); err == nil {
+		t.Fatal("database accepted OPERATING_BANK on a liability account")
 	}
 }

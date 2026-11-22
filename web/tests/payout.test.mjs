@@ -37,7 +37,9 @@ test("payout form rejects zero, negatives, extra decimals, overflow, and incompl
 });
 
 test("only active customer liability wallets in the selected currency fund payouts", () => {
-  const wallet = { id: values.source_account_id, account_number: "2002", name: "Customer wallet", type: "LIABILITY", currency: "USD", is_active: true };
+  const wallet = { id: values.source_account_id, account_number: "2002", name: "Customer wallet", type: "LIABILITY", currency: "USD", is_active: true, system_role: null };
   assert.equal(payout.eligiblePayoutSource(wallet, "USD"), true);
-  for (const patch of [{ currency: "JPY" }, { is_active: false }, { type: "ASSET" }, { account_number: "2003" }, { name: "USD Clearing" }]) assert.equal(payout.eligiblePayoutSource({ ...wallet, ...patch }, "USD"), false);
+  // Eligibility follows the system role, not the number or name.
+  assert.equal(payout.eligiblePayoutSource({ ...wallet, account_number: "2003", name: "Old clearing" }, "USD"), true);
+  for (const patch of [{ currency: "JPY" }, { is_active: false }, { type: "ASSET" }, { system_role: "PAYOUT_CLEARING" }]) assert.equal(payout.eligiblePayoutSource({ ...wallet, ...patch }, "USD"), false);
 });

@@ -79,6 +79,7 @@ var ErrorTable = apperr.Table{
 	{Target: repositories.ErrAccountNotFound, Error: apperr.NotFound("account_not_found", "No ledger account has that ID.")},
 	{Target: repositories.ErrJournalNotFound, Error: apperr.NotFound("transfer_not_found", "No transfer has that ID.")},
 	{Target: repositories.ErrAccountNumberTaken, Error: apperr.New(http.StatusConflict, "account_number_taken", "An account with this account number already exists.")},
+	{Target: repositories.ErrSystemRoleTaken, Error: apperr.New(http.StatusConflict, "system_role_taken", "Another account in this currency already has that system role.")},
 	{Target: repositories.ErrAccountInactive, Error: apperr.New(http.StatusUnprocessableEntity, "account_inactive", "One of the accounts is inactive and cannot receive postings.")},
 	{Target: repositories.ErrCurrencyMismatch, Error: apperr.New(http.StatusUnprocessableEntity, "currency_mismatch", "Every account in a transfer must use the transfer's currency.")},
 	{Target: repositories.ErrAlreadyReversed, Error: apperr.New(http.StatusConflict, "already_reversed", "This transfer has already been reversed.")},

@@ -19,7 +19,7 @@ export function buildPayoutRequest(values: PayoutValues, currency: Currency): Cr
   return { ...validated, currency, amount: amount.minor };
 }
 
+// Mirrors SettlementService.Reserve: an active customer wallet, never a system account.
 export function eligiblePayoutSource(account: LedgerAccount, currency: Currency): boolean {
-  return account.is_active && account.currency === currency && account.type === "LIABILITY"
-    && account.account_number !== "2003" && !account.name.toLowerCase().includes("clearing");
+  return account.is_active && account.currency === currency && account.type === "LIABILITY" && account.system_role === null;
 }

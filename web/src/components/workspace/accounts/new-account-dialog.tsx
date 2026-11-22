@@ -5,7 +5,10 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { boolean, mixed, object, string, ValidationError } from "yup";
 import { AuthApiError } from "@/lib/auth-api";
 import { useAuthSession } from "@/lib/auth-session";
-import { ACCOUNT_TYPES, CURRENCIES, createAccount, type AccountType, type Currency } from "@/lib/ledger-api";
+import {
+  ACCOUNT_TYPES, CURRENCIES, SYSTEM_ROLES, SYSTEM_ROLE_LABEL, SYSTEM_ROLE_TYPE, createAccount,
+  type AccountType, type Currency, type SystemRole,
+} from "@/lib/ledger-api";
 import { notify } from "@/lib/notify";
 import { Icon } from "../../icons";
 import "../../admin/admin.css";
@@ -17,7 +20,18 @@ const schema = object({
   type: mixed<AccountType>().oneOf([...ACCOUNT_TYPES]).required(),
   currency: mixed<Currency>().oneOf([...CURRENCIES]).required(),
   overdraft_allowed: boolean().required(),
+  system_role: mixed<SystemRole>().oneOf([...SYSTEM_ROLES]).nullable().defined()
+    .test("role-type", "This role needs a different account type.", (role, ctx) => {
+      const parent: unknown = ctx.parent;
+      const accountType = typeof parent === "object" && parent !== null && "type" in parent ? parent.type : undefined;
+      return role == null || SYSTEM_ROLE_TYPE[role] === accountType;
+    }),
 });
+
+const ROLE_HELP: Record<SystemRole, string> = {
+  PAYOUT_CLEARING: "Holds reserved payout funds until they are captured or released.",
+  OPERATING_BANK: "Receives captured payouts.",
+};
 
 const TYPE_HELP: Record<AccountType, string> = {
   ASSET: "What the business holds (bank, cash). Debits increase it.",
@@ -37,6 +51,8 @@ export function NewAccountDialog({ onClose, onCreated }: { onClose: () => void; 
   const { currency: workspaceCurrency } = useWorkspaceCurrency();
   const [currency, setCurrency] = useState<Currency>(workspaceCurrency);
   const [overdraft, setOverdraft] = useState(false);
+  const [systemRole, setSystemRole] = useState<SystemRole | null>(null);
+  const rolesForType = SYSTEM_ROLES.filter((r) => SYSTEM_ROLE_TYPE[r] === type);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -47,7 +63,7 @@ export function NewAccountDialog({ onClose, onCreated }: { onClose: () => void; 
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const values = { account_number: accountNumber, name, type, currency, overdraft_allowed: overdraft };
+    const values = { account_number: accountNumber, name, type, currency, overdraft_allowed: overdraft, system_role: systemRole };
     try {
       schema.validateSync(values);
     } catch (e) {
@@ -92,7 +108,12 @@ export function NewAccountDialog({ onClose, onCreated }: { onClose: () => void; 
           <div className="adm-form-grid">
             <div className="adm-field">
               <label htmlFor={`${id}-type`}>Type</label>
-              <select id={`${id}-type`} value={type} onChange={(e) => setType(ACCOUNT_TYPES.find((t) => t === e.target.value) ?? "LIABILITY")}>
+              <select id={`${id}-type`} value={type} onChange={(e) => {
+                const next = ACCOUNT_TYPES.find((t) => t === e.target.value) ?? "LIABILITY";
+                setType(next);
+                // A role is tied to one account type; drop it when the type no longer fits.
+                if (systemRole !== null && SYSTEM_ROLE_TYPE[systemRole] !== next) setSystemRole(null);
+              }}>
                 {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
               <p className="adm-field-hint">{TYPE_HELP[type]}</p>
@@ -105,6 +126,16 @@ export function NewAccountDialog({ onClose, onCreated }: { onClose: () => void; 
               <p className="adm-field-hint">Cannot be changed later; transfers use one currency.</p>
             </div>
           </div>
+          {rolesForType.length > 0 && (
+            <div className="adm-field">
+              <label htmlFor={`${id}-role`}>System role</label>
+              <select id={`${id}-role`} value={systemRole ?? ""} onChange={(e) => setSystemRole(rolesForType.find((r) => r === e.target.value) ?? null)}>
+                <option value="">None (ordinary account)</option>
+                {rolesForType.map((r) => <option key={r} value={r}>{SYSTEM_ROLE_LABEL[r]}</option>)}
+              </select>
+              <p className="adm-field-hint">{systemRole ? ROLE_HELP[systemRole] : "Payouts use the accounts holding these roles; one per currency."}</p>
+            </div>
+          )}
           <label className="adm-check">
             <input type="checkbox" checked={overdraft} onChange={(e) => setOverdraft(e.target.checked)} />
             <span>Allow overdraft <small>— the balance may go below zero (e.g. a funding or clearing account). Leave off for customer wallets.</small></span>

@@ -7,6 +7,12 @@ export type Currency = (typeof CURRENCIES)[number];
 export const ACCOUNT_TYPES = ["ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 export type Direction = "DEBIT" | "CREDIT";
+/** Fixed-purpose accounts used by workflows; at most one per role and currency. */
+export const SYSTEM_ROLES = ["PAYOUT_CLEARING", "OPERATING_BANK"] as const;
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+/** The only account type that may hold each role (models.AccountSystemRole.AccountType). */
+export const SYSTEM_ROLE_TYPE: Record<SystemRole, AccountType> = { PAYOUT_CLEARING: "LIABILITY", OPERATING_BANK: "ASSET" };
+export const SYSTEM_ROLE_LABEL: Record<SystemRole, string> = { PAYOUT_CLEARING: "Payout clearing", OPERATING_BANK: "Operating bank" };
 
 export type LedgerAccount = {
   id: string;
@@ -16,6 +22,8 @@ export type LedgerAccount = {
   currency: Currency;
   overdraft_allowed: boolean;
   is_active: boolean;
+  /** Null for ordinary accounts. */
+  system_role: SystemRole | null;
   /** Minor units in the account's normal direction; negative only with overdraft. */
   balance: string;
   created_at: string;
@@ -61,7 +69,15 @@ export type ZeroSumReport = {
   checked_at: string;
 };
 
-export type NewAccount = { account_number: string; name: string; type: AccountType; currency: Currency; overdraft_allowed: boolean };
+export type NewAccount = {
+  account_number: string;
+  name: string;
+  type: AccountType;
+  currency: Currency;
+  overdraft_allowed: boolean;
+  /** Null creates an ordinary account. */
+  system_role: SystemRole | null;
+};
 export type TransferLeg = { account_id: string; direction: Direction; amount: string };
 export type TransferInput = { reference_id: string; description: string; currency: Currency; legs: TransferLeg[] };
 

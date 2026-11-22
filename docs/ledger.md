@@ -39,7 +39,7 @@ Fingerprint: SHA-256 of the method, route (with target ID) and canonical validat
 | Method | Path | Permission | Notes |
 | --- | --- | --- | --- |
 | GET | `/accounts` | `ledger:read` | `?q=&type=&currency=&limit=50&offset=` → page of accounts with `balance` |
-| POST | `/accounts` | `accounts:write` | `{account_number, name, type, currency, overdraft_allowed}`; `409 account_number_taken` |
+| POST | `/accounts` | `accounts:write` | `{account_number, name, type, currency, overdraft_allowed, system_role}`; `409 account_number_taken` / `system_role_taken` |
 | GET | `/accounts/:id` | `ledger:read` | account with derived balance |
 | GET | `/accounts/:id/postings` | `ledger:read` | `?limit=50&offset=`, newest first, with journal reference |
 | GET | `/transfers` | `transfers:read` | `?q=&account_id=&currency=&limit=20&offset=` → journals with postings, `total`, `reversal_for_id`, `reversed_by_id` |
@@ -109,7 +109,17 @@ Switching queries that currency’s ledger; it does not convert amounts or chang
 
 ### Sandbox payouts
 
-The Settlements page uses the live ledger for the selected currency. Source wallets must be active customer liability accounts. An active clearing liability account (number 2003 or a name containing "clearing") is required; capture also requires an active operating bank asset account (number 1001 or a name containing "bank"). Arbitrary wallets and assets are never selected as fallback destinations.
+The Settlements page uses the live ledger for the selected currency. Payout accounts are chosen by an explicit **system role** (migration `024_account_system_roles.sql`), never by account number or name:
+
+| `system_role` | Account type | Used for |
+| --- | --- | --- |
+| `PAYOUT_CLEARING` | LIABILITY | Holds reserved funds until capture or release; required to reserve |
+| `OPERATING_BANK` | ASSET | Receives captured payouts; required to capture |
+| `null` | any | Ordinary account |
+
+The database enforces at most one account per role and currency, and ties each role to its account type. Set the role when creating the account (the "System role" field in the New account dialog, or `system_role` in `POST /accounts`); the accounts table shows a badge for role holders. A role holder must be active, or reserving and capturing return `409 clearing_account_missing` / `operating_bank_missing`. Source wallets must be active liability accounts with no system role. Arbitrary wallets and assets are never selected as fallback destinations.
+
+Migration 024 gives existing databases the roles the old heuristic picked: per currency, the first active liability numbered 2003 or named "…clearing…", and the first active asset numbered 1001 or named "…bank…". `go run ./cmd/seed-ledger` assigns both roles to its JPY accounts. Changing a role after creation is not implemented yet; until then, use SQL (`UPDATE accounts SET system_role = …`).
 
 | Method | Route | Permission | Behavior |
 | --- | --- | --- | --- |

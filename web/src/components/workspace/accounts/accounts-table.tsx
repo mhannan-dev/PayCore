@@ -2,7 +2,7 @@
 
 import { useWorkspaceCurrency } from "@/lib/workspace-currency";
 import { useEffect, useState } from "react";
-import { ACCOUNT_TYPES, CURRENCIES, fetchAccounts, type AccountType, type LedgerAccount } from "@/lib/ledger-api";
+import { ACCOUNT_TYPES, CURRENCIES, SYSTEM_ROLE_LABEL, fetchAccounts, type AccountType, type LedgerAccount } from "@/lib/ledger-api";
 import { formatMoney } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
 import { usePermission } from "../../can";
@@ -56,6 +56,7 @@ function AccountRow({ account: a, open, onToggle }: { account: LedgerAccount; op
       <td>{a.currency}</td>
       <td className={`money${negative ? " money-negative" : ""}`}>{formatMoney(a.balance, a.currency)}</td>
       <td>
+        {a.system_role && <Badge tone="neutral">{SYSTEM_ROLE_LABEL[a.system_role]}</Badge>}
         {!a.is_active && <Badge tone="amber">Inactive</Badge>}
         {a.overdraft_allowed && <Badge tone="neutral">Overdraft</Badge>}
       </td>

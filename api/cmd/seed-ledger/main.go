@@ -30,14 +30,17 @@ var seedActor = models.UserDTO{ID: "00000000-0000-4000-8000-000000000001", Email
 type accountSeed struct {
 	number, name string
 	typ          models.AccountType
+	role         *models.AccountSystemRole // Null for ordinary accounts.
 }
 
+func role(r models.AccountSystemRole) *models.AccountSystemRole { return &r }
+
 var chart = []accountSeed{
-	{"1001", "Operating bank", models.AccountAsset},
-	{"2001", "Akira · Wallet", models.AccountLiability},
-	{"2002", "Hana · Wallet", models.AccountLiability},
-	{"2003", "Payout clearing", models.AccountLiability},
-	{"4001", "Platform fee revenue", models.AccountRevenue},
+	{"1001", "Operating bank", models.AccountAsset, role(models.RoleOperatingBank)},
+	{"2001", "Akira · Wallet", models.AccountLiability, nil},
+	{"2002", "Hana · Wallet", models.AccountLiability, nil},
+	{"2003", "Payout clearing", models.AccountLiability, role(models.RolePayoutClearing)},
+	{"4001", "Platform fee revenue", models.AccountRevenue, nil},
 }
 
 type journalSeed struct {
@@ -72,10 +75,10 @@ func main() {
 	ids := map[string]string{}
 	for _, a := range chart {
 		account, err := ledger.CreateAccount(ctx, models.UserDTO{}, models.CreateAccountRequest{
-			AccountNumber: a.number, Name: a.name, Type: a.typ, Currency: models.CurrencyJPY,
+			AccountNumber: a.number, Name: a.name, Type: a.typ, Currency: models.CurrencyJPY, SystemRole: a.role,
 		})
 		status := "created"
-		if errors.Is(err, repositories.ErrAccountNumberTaken) {
+		if errors.Is(err, repositories.ErrAccountNumberTaken) || errors.Is(err, repositories.ErrSystemRoleTaken) {
 			account, err = findAccount(ctx, ledger, a.number)
 			status = "exists"
 		}
