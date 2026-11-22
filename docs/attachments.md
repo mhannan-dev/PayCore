@@ -37,7 +37,7 @@ updates the locked database row, then removes the old copy after commit. It
 retains the original if the database update fails. Unreferenced/orphan files are
 left untouched because their original filenames are unknown.
 
-File bytes live in the local `UPLOAD_DIR` folder, defaulting to `api/uploads/` when the API is launched through `run.ps1`. This folder is ignored by Git. Back up the database and upload folder together. Set an absolute `UPLOAD_DIR` if launching from a different working directory. Containerized API deployments will need a persistent volume for this directory; the current PostgreSQL-only Compose file does not mount API uploads.
+File bytes live in the local `UPLOAD_DIR` folder, defaulting to `api/uploads/` when the API is launched through `run.ps1` and `/app/uploads` in the Compose API container. This folder is ignored by Git. Back up the database and upload folder together. Set an absolute `UPLOAD_DIR` if launching from a different working directory; the Compose API uses the persistent `api_uploads` volume.
 
 The table records ID, owner, display filename, server-detected MIME type, byte size, SHA-256 checksum, storage kind/key, creation time and deletion time. Storage keys are random and never exposed in JSON. Filenames never become filesystem paths; Go's confined `os.Root` filesystem API keeps access inside the upload directory.
 

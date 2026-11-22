@@ -58,6 +58,19 @@ $env:DATABASE_TEST_URL = 'postgres://paycore:paycore_local_dev@127.0.0.1:5434/pa
 
 Repository, controller and seeder integration suites use isolated schemas and clean them up after testing. Migration tests remain in `api/database/migrations` because they inspect embedded SQL and private migration helpers.
 
+## Concurrency load tests
+
+The k6 suite drives concurrent idempotent JPY transfers against a running API and verifies the ledger invariant before and after the run. It is opt-in and is not part of `.\test.ps1`. It uses a seeded non-admin operator for transfers and a separate auditor for the zero-sum report, so the admin MFA flow is not involved. Each VU submits a transfer twice with the same `Idempotency-Key` and checks that both responses return the same journal ID; counters track duplicate postings, overdrafts, `ledger_busy` responses, replay matches and invariant failures.
+
+Start the API with seeded users and ledger accounts, then run:
+
+```powershell
+$env:PAYCORE_LOAD_PASSWORD = '<seeded password>'
+.\api\load\run-load-test.ps1 -BaseUrl 'http://127.0.0.1:8080' -Vus 20 -Duration '30s'
+```
+
+The wrapper uses a local `k6` binary when present, otherwise it runs `grafana/k6:latest` through Docker. It prompts for the password when `PAYCORE_LOAD_PASSWORD` is unset. Override `-Email`, `-AuditorEmail`, `-Currency`, `-DebitAccount`, `-CreditAccount`, `-Amount`, `-MaxBusy`, `-MaxP95Ms` and `-MaxFailureRate` for other scenarios. Default accounts are `1001` (debit) and `2003` (credit) from `seed-ledger`; use small amounts so the debit account is not drained during long runs.
+
 ## Opt-in local PostgreSQL tests
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Suite api -Integration` with the local database in `compose.yaml` running. This uses its public localhost development connection unless `DATABASE_TEST_URL` is already set. The runner restores that environment variable afterward and serializes Go packages to avoid competing migration advisory locks. All repository tests use isolated schemas that are cleaned up at completion.

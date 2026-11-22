@@ -90,7 +90,7 @@ PayCore is in **alpha**. The platform layer (authentication, access control, use
 │   └── routes/          per-resource API routes, middleware and permissions
 ├── web/                 Next.js console (src/app routes, src/components, src/lib)
 ├── docs/                feature, setup and design documentation
-├── compose.yaml         PostgreSQL and Mailpit for local development
+├── compose.yaml         API, web, PostgreSQL and Mailpit for local development
 └── run.ps1              starts the database, API and web together
 ```
 
@@ -137,6 +137,20 @@ npm install
 npm run dev
 ```
 
+### Full stack with Docker Compose
+
+Compose can also run the API and web console as production-style containers. Copy the root template, generate a local MFA key, then build and start both services:
+
+```powershell
+Copy-Item .env.example .env
+$bytes = [byte[]]::new(32)
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+"MFA_ENCRYPTION_KEY=$([Convert]::ToBase64String($bytes))" | Set-Content .env
+docker compose up -d --build --wait api web
+```
+
+Open http://localhost:3000; the API is available at http://localhost:8080. Uploads persist in the `api_uploads` volume. Stop or avoid `run.ps1` and any other local servers on ports 3000 or 8080 before starting the Compose stack. The generated key stays in the git-ignored `.env` file and is for local development only.
+
 ### Create users
 
 Seed the four development accounts (admin, operator, auditor, engineer). The command prompts for a password and never prints it:
@@ -152,7 +166,15 @@ Open http://localhost:3000 and sign in. Invitation and password-reset emails sen
 
 ## Configuration
 
-Copy [`api/.env.example`](api/.env.example) to `api/.env` and [`web/.env.example`](web/.env.example) to `web/.env.local`. Both real files are git-ignored. **Never commit real credentials.**
+Copy [`api/.env.example`](api/.env.example) to `api/.env` and [`web/.env.example`](web/.env.example) to `web/.env.local`. Both real files are git-ignored. The Compose stack also reads the git-ignored root `.env` from [`.env.example`](.env.example). **Never commit real credentials.**
+
+### Compose (`.env`)
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MFA_ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte key used by the API container. Generate a local value as shown above. |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Browser-visible API base URL compiled into the web image. |
+| `NEXT_PUBLIC_DEMO_PASSWORD` | *(empty)* | Optional development-only demo password. |
 
 ### API (`api/.env`)
 
@@ -186,6 +208,8 @@ Check the email settings without starting the API: `cd api; go run ./cmd/mail-ch
 | Variable | Used by |
 | --- | --- |
 | `PAYCORE_SEED_PASSWORD` | `seed-users`, to avoid the interactive prompt in scripts |
+| `PAYCORE_LOAD_PASSWORD` | `api/load/run-load-test.ps1`, to supply the seeded operator/auditor password |
+| `K6_IMAGE` | `api/load/run-load-test.ps1`, to override the Docker k6 image when a local k6 binary is unavailable |
 | `PAYCORE_API_URL` | `run.ps1`, to point the web app at a different API |
 | `DATABASE_TEST_URL` | Go integration tests (PostgreSQL); skipped when unset |
 | `SMTP_TEST_HOST`, `SMTP_TEST_PORT` | Go SMTP delivery tests (e.g. Mailpit); skipped when unset |

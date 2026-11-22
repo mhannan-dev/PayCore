@@ -317,9 +317,9 @@ All endpoints require authentication and account-level authorization. Audit, out
   - [x] Build Double-Entry Transfer Studio and Idempotency Replay Tester.
   - [x] Implement Real-Time Zero-Sum Verification status bar.
 - [ ] **Milestone 4**: Docker Compose & Live Demonstration Suite
-  - [ ] Containerize API (`golang:alpine`) and Web (`node:alpine` / static Nginx).
-  - [ ] Automated seed script with realistic Japanese banking accounts (JPY).
-  - [ ] Concurrency load testing suite using `k6` or `wrk` measuring deadlocks, bounded retries, throughput, and latency; verify no duplicate postings or overdrafts.
+  - [x] Containerize API (`golang:alpine`) and Web (`node:alpine` / static Nginx).
+  - [x] Automated seed script with realistic Japanese banking accounts (JPY).
+  - [x] Concurrency load testing suite using `k6` or `wrk` measuring deadlocks, bounded retries, throughput, and latency; verify no duplicate postings or overdrafts.
   - [ ] PostgreSQL integration tests for unbalanced journal rejection, append-only enforcement, currency validation, and simultaneous full reversals.
   - [ ] Retry and failure tests covering concurrent duplicates, changed payloads, Redis outages, rollback, and crashes between broker acknowledgment and the outbox marker commit.
 

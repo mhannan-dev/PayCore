@@ -189,8 +189,8 @@ Endpoint ও storage ব্যবহারের বিস্তারিত: [U
 - [ ] Redis outage, rollback এবং broker acknowledgment-এর পরে relay crash পরীক্ষা।
 - [ ] Consumer বন্ধ থাকা অবস্থায় transfer commit এবং recovery-এ backlog processing পরীক্ষা।
 - [ ] Settlement ambiguous timeout, duplicate callback ও compensation পরীক্ষা।
-- [ ] k6/wrk load test-এ throughput, latency, deadlock ও retry পরিমাপ।
-- [ ] Realistic JPY seed data ও repeatable demonstration setup।
+- [x] k6/wrk load test-এ throughput, latency, deadlock ও retry পরিমাপ।
+- [x] Realistic JPY seed data ও repeatable demonstration setup।
 
 ## ১৪. কাজের অগ্রাধিকার
 
