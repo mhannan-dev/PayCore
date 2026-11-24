@@ -58,6 +58,9 @@ func main() {
 		err = migrations.Apply(migrationCtx, pool)
 		migrationCancel()
 		if err != nil {
+			if errors.Is(err, migrations.ErrLegacyRoleReview) {
+				log.Fatal(err)
+			}
 			log.Fatal("Database migration failed; API startup stopped.")
 		}
 		challenges := services.NewCaptchaStore()
@@ -110,7 +113,6 @@ func main() {
 		emailDone = make(chan struct{})
 		go func() { defer close(emailDone); queue.Run(workerCtx) }()
 		invites := services.NewInvitationService(repositories.NewInvitationRepository(pool), mail != nil, cfg.AppURL)
-		invites.Audit = auditLog
 		registeredControllers.Users = controllers.NewUsersController(services.NewUserAdminService(repositories.NewRBACRepository(pool), invites))
 		registeredControllers.Invitations = controllers.NewInvitationController(invites)
 		resets := services.NewPasswordResetService(repositories.NewPasswordResetRepository(pool), challenges, mail != nil, cfg.AppURL)

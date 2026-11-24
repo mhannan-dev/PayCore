@@ -79,6 +79,7 @@ var ErrorTable = apperr.Table{
 	{Target: repositories.ErrEmailTaken, Error: apperr.New(http.StatusConflict, "email_taken", "A user with this email already exists.")},
 	{Target: repositories.ErrAlreadyActivated, Error: apperr.New(http.StatusConflict, "already_activated", "This user has already set a password.")},
 	{Target: repositories.ErrLastAdmin, Error: apperr.New(http.StatusConflict, "last_admin", "At least one active user must keep the Admin role.")},
+	{Target: repositories.ErrUserHasMerchant, Error: apperr.Conflict("user_has_merchant", "This user owns a Quantum merchant profile and cannot be deleted. Deactivate the user to revoke access while preserving payment history.")},
 
 	// Not found (named sentinels; a bare pgx.ErrNoRows is deliberately not mapped)
 	{Target: repositories.ErrUserNotFound, Error: apperr.NotFound("user_not_found", "No user has that ID.")},

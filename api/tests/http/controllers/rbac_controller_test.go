@@ -65,6 +65,15 @@ type rbacStore struct {
 	lastErr   error
 }
 
+func TestMerchantOwnerDeletionConflict(t *testing.T) {
+	router, store, token := rbacRouter(t, models.User{ID: adminID, Email: "admin@example.test", Roles: []string{models.RoleAdmin}, IsActive: true, Permissions: []string{models.PermUsersRead, models.PermUsersWrite}})
+	store.lastErr = repositories.ErrUserHasMerchant
+	response := router.do(http.MethodDelete, "/api/v1/users/"+memberID, "", token)
+	if response.Code != http.StatusConflict || errorCode(t, response) != "user_has_merchant" || !strings.Contains(response.Body.String(), "Deactivate") {
+		t.Fatalf("merchant owner conflict: %d %s", response.Code, response.Body)
+	}
+}
+
 func (s *rbacStore) ListRoleDetails(context.Context) ([]models.RoleDetail, error) {
 	return []models.RoleDetail{{Role: models.Role{Code: models.RoleAdmin}, Permissions: []string{models.PermUsersRead}, UserCount: 1}}, nil
 }

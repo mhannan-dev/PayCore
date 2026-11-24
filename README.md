@@ -345,7 +345,7 @@ All changes follow the [coding rules](docs/coding_rules.md): type safety, thin c
 | API responses and errors | [docs/api_responses.md](docs/api_responses.md) |
 | Seeding and administrators | [docs/user_seeder.md](docs/user_seeder.md), [docs/system_admin.md](docs/system_admin.md) |
 | Microservices architecture (Bengali) | [docs/microservices_architecture_bn.md](docs/microservices_architecture_bn.md) |
-| Quantum payments (testnet) | [docs/quantum/ARCHITECTURE.md](docs/quantum/ARCHITECTURE.md), [API.md](docs/quantum/API.md), [SECURITY.md](docs/quantum/SECURITY.md), [DEMO.md](docs/quantum/DEMO.md), [AGENT_MANDATE.md](docs/quantum/AGENT_MANDATE.md) |
+| Quantum payments (testnet) | [docs/quantum/ARCHITECTURE.md](docs/quantum/ARCHITECTURE.md), [API.md](docs/quantum/API.md), [SECURITY.md](docs/quantum/SECURITY.md), [DEMO.md](docs/quantum/DEMO.md), [AGENT_MANDATE.md](docs/quantum/AGENT_MANDATE.md), [eligibility decision](docs/quantum/ELIGIBILITY.md) |
 
 ## Contributing
 

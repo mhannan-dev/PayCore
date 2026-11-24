@@ -20,7 +20,7 @@ The photo attachment link defaults to NULL and new users are active. All files/p
 
 The command prints explicit `first_name`, `last_name`, `email`, `roles`, and `status` columns. An absent last name is printed as `NULL`. Seeder results also expose `first_name` and nullable `last_name` JSON fields; skipped users report their current database values rather than fixture defaults.
 
-The command applies pending migrations before seeding. Earlier migrations add ADMIN support and convert the old scalar `role` into one-item `roles` arrays. Migration 026 consolidates the role set to ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR: OPERATOR becomes ACCOUNTANT, while LEAD_OPERATOR and STAFF_ENGINEER become ADMIN along with their permissions. Only a newly seeded admin gets both ADMIN and ACCOUNTANT; an existing admin's role list stays unchanged on rerun.
+The command applies pending migrations before seeding. Earlier migrations add ADMIN support and convert the old scalar `role` into one-item `roles` arrays. Migration 026 consolidates the role set to ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR: OPERATOR becomes ACCOUNTANT. The runner stops before 026 if LEAD_OPERATOR or STAFF_ENGINEER users still need explicit role mapping; follow the [legacy upgrade review](rbac.md#legacy-role-upgrade-review). Only a newly seeded admin gets both ADMIN and ACCOUNTANT; an existing admin's role list stays unchanged on rerun.
 
 Rerunning skips existing emails: existing passwords, roles, active status and profile fields are preserved. If an email already existed, use its original password, not the newly entered seed password. Inserts are committed together; a failed insert rolls back that seed transaction. Successfully applied schema migrations remain applied.
 

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"paycore/api/internal/audit"
 	"paycore/api/internal/mailer"
 	"paycore/api/internal/models"
 )
@@ -32,13 +31,11 @@ type InvitationStore interface {
 }
 
 // InvitationService invites users by email and lets them set their own password.
-// Email intent is stored atomically with each invitation.
+// The store commits invitation state, email intent and its audit event together.
 type InvitationService struct {
 	emailEnabled bool
 	store        InvitationStore
 	appURL       string
-	// Audit, when set, records invitations sent, re-sent and accepted.
-	Audit audit.Recorder
 }
 
 // NewInvitationService receives delivery configuration; workers own delivery.
@@ -59,8 +56,6 @@ func (s *InvitationService) Invite(ctx context.Context, req models.CreateUserReq
 	if err != nil {
 		return models.ManagedUser{}, "", err
 	}
-	audit.Record(ctx, s.Audit, audit.Event{Action: audit.UserInvited, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email),
-		Details: audit.Details{RolesAfter: u.Roles}})
 	return s.queued(u)
 }
 
@@ -75,7 +70,6 @@ func (s *InvitationService) Resend(ctx context.Context, userID, invitedBy string
 	if err != nil {
 		return models.ManagedUser{}, "", err
 	}
-	audit.Record(ctx, s.Audit, audit.Event{Action: audit.InvitationResent, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)})
 	return s.queued(u)
 }
 
@@ -115,9 +109,6 @@ func (s *InvitationService) Accept(ctx context.Context, token, password string) 
 	email, err := s.store.AcceptInvitation(ctx, digestToken(token), hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrInvitation
-	}
-	if err == nil {
-		audit.Record(ctx, s.Audit, audit.Event{Action: audit.InvitationAccepted, ActorEmail: audit.Ptr(email), TargetEmail: audit.Ptr(email)})
 	}
 	return email, err
 }

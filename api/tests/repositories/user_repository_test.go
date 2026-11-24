@@ -6,38 +6,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"paycore/api/database/migrations"
-	"paycore/api/internal/database"
 	"paycore/api/internal/repositories"
 	"paycore/api/internal/services"
 )
 
 func TestUserSessionPostgresIntegration(t *testing.T) {
-	dsn := os.Getenv("DATABASE_TEST_URL")
-	if dsn == "" {
-		t.Skip("set DATABASE_TEST_URL for user/session integration")
-	}
+	pool := isolatedPool(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pool, err := database.Open(ctx, dsn)
-	if err != nil {
-		t.Fatal("test database unavailable")
-	}
-	defer pool.Close()
-	if err = migrations.Apply(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
-	if err = migrations.Apply(ctx, pool); err != nil {
-		t.Fatal("migration must be repeatable:", err)
-	}
 	repo := repositories.NewUserRepository(pool)
 	var nonce [12]byte
-	if _, err = rand.Read(nonce[:]); err != nil {
+	if _, err := rand.Read(nonce[:]); err != nil {
 		t.Fatal(err)
 	}
 	email := "auth-test-" + hex.EncodeToString(nonce[:]) + "@example.test"

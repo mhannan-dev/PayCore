@@ -210,8 +210,10 @@ erDiagram
   | পুরনো role | এখন | Permission |
   | --- | --- | --- |
   | `OPERATOR` | `ACCOUNTANT` | OPERATOR-এর সব grant ACCOUNTANT-এ কপি হয়েছে |
-  | `LEAD_OPERATOR` | `ADMIN` | grant-গুলো ADMIN-এ যোগ হয়েছে |
-  | `STAFF_ENGINEER` | `ADMIN` | grant-গুলো ADMIN-এ যোগ হয়েছে |
+  | `LEAD_OPERATOR` | Explicit review | Pending 026-এর আগে উপযুক্ত role বেছে নিতে হবে; স্বয়ংক্রিয় ADMIN promotion runner আটকায় |
+  | `STAFF_ENGINEER` | Explicit review | Pending 026-এর আগে উপযুক্ত role বেছে নিতে হবে; স্বয়ংক্রিয় ADMIN promotion runner আটকায় |
+
+  026 ইতিমধ্যে applied হলে আগের SQL mapping-এর ADMIN assignment অপরিবর্তিত থাকে। সেগুলো review করতে deployment history লাগবে; runner অনুমান করে demote করে না। দেখুন [legacy upgrade review](rbac.md#legacy-role-upgrade-review)।
 
 - `users.roles`-এ `CHECK (valid_user_roles(roles))`: ১ থেকে ৩টা role, কোনো duplicate বা `NULL` নয়, আর শুধু ওই ৩টার মধ্য থেকে। নতুন user-এর ডিফল্ট role `ACCOUNTANT`।
 - Profile photo-র FK composite: `(photo_attachment_id, id)` → `attachments(id, owner_user_id)`। তাই অন্যের file কেউ নিজের photo বানাতে পারে না।

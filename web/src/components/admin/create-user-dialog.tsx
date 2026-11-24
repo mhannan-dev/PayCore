@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AuthApiError, createUser, type InvitationResult, type RoleDetail } from "@/lib/auth-api";
 import { useAuthSession } from "@/lib/auth-session";
 import { notify } from "@/lib/notify";
+import { ROLE_CODES } from "@/lib/rbac";
 import { Icon } from "../icons";
 import { roleLabel } from "../user-profile/roles";
 import { validateNewUser, type NewUserErrors, type NewUserValues } from "./new-user-schema";
@@ -52,7 +53,9 @@ export function CreateUserDialog({ roles, onClose, onCreated }: Props) {
   }
 
   function toggleRole(code: string) {
-    change({ roles: values.roles.includes(code) ? values.roles.filter((r) => r !== code) : [...values.roles, code] });
+    const role = ROLE_CODES.find((value) => value === code);
+    if (!role) return;
+    change({ roles: values.roles.includes(role) ? values.roles.filter((r) => r !== role) : [...values.roles, role] });
   }
 
   async function submit(event: React.FormEvent) {
@@ -63,7 +66,7 @@ export function CreateUserDialog({ roles, onClose, onCreated }: Props) {
     if (Object.keys(found).length > 0) return;
     setSaving(true);
     try {
-      const ordered = roles.map((r) => r.code).filter((code) => values.roles.includes(code));
+      const ordered = roles.map((r) => r.code).filter((code) => values.roles.some((selected) => selected === code));
       const result = await createUser(session.token, {
         first_name: values.firstName.trim(),
         last_name: values.lastName.trim() || null,
@@ -126,7 +129,7 @@ export function CreateUserDialog({ roles, onClose, onCreated }: Props) {
             <span className="adm-field-label" id={`${id}-roles`}>Roles <em aria-hidden="true">*</em></span>
             <div className="adm-role-pills" role="group" aria-labelledby={`${id}-roles`}>
               {roles.map((role) => {
-                const checked = values.roles.includes(role.code);
+                const checked = values.roles.some((selected) => selected === role.code);
                 return (
                   <label key={role.code} className={`adm-role-pill${checked ? " is-checked" : ""}`} title={role.description}>
                     <input type="checkbox" checked={checked} onChange={() => toggleRole(role.code)} />

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -59,6 +60,9 @@ func main() {
 	}
 	defer pool.Close()
 	if err = migrations.Apply(ctx, pool); err != nil {
+		if errors.Is(err, migrations.ErrLegacyRoleReview) {
+			log.Fatal(err)
+		}
 		log.Fatal("Database migration failed; seeding stopped.")
 	}
 	if err = seeders.RBAC(ctx, pool); err != nil {

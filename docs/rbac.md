@@ -1,6 +1,47 @@
 # Role-based access control
 
-Roles, permissions and their mapping live in migration `008_rbac.sql` (kept current by `seed-users`). A user's roles are `users.roles`, mirrored in `user_roles`; their permissions are the union of what those roles grant. Migration `026_accountant_roles.sql` consolidates the role set to ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR: OPERATOR becomes ACCOUNTANT, while LEAD_OPERATOR and STAFF_ENGINEER become ADMIN along with their permissions.
+Roles, permissions and their mapping live in migration `008_rbac.sql` (kept current by `seed-users`). A user's roles are `users.roles`, mirrored in `user_roles`; their permissions are the union of what those roles grant. Migration `026_accountant_roles.sql` consolidates the role set to ADMIN, ACCOUNTANT and COMPLIANCE_AUDITOR. OPERATOR becomes ACCOUNTANT. The application migration runner requires explicit mapping of users with LEAD_OPERATOR or STAFF_ENGINEER before applying 026, preventing automatic promotion into ADMIN.
+
+## Legacy role upgrade review
+
+Use the application migration runner (API startup or the seed commands). Before
+pending migration 026, it locks `users` against concurrent writes and stops with
+`ErrLegacyRoleReview` if a user still holds LEAD_OPERATOR or STAFF_ENGINEER. The
+entire migration transaction rolls back, preserving the previous schema and data.
+
+An operator must review those accounts and explicitly replace their legacy role
+with ADMIN only when full administration is intended, OPERATOR for the future
+ACCOUNTANT role, or COMPLIANCE_AUDITOR for financial read-only access. Preserve
+other intended roles and avoid duplicates. On pre-005 schemas edit the scalar
+`users.role`; on 005–025 schemas edit the `users.roles` array. Then rerun the
+upgrade. If a very early schema's CHECK does not yet allow ADMIN, map to OPERATOR
+first, complete the upgrade, then explicitly grant administration using the
+[administrator CLI](system_admin.md). Do not execute the historical 026 SQL
+directly to bypass this check.
+
+Already-applied migration files are unchanged. Databases that already applied
+026 retain their current roles: the old source roles cannot be recovered reliably
+from the current arrays. Review existing ADMIN assignments using deployment
+records; the runner does not guess which administrators to demote. Fresh
+installations and already-reviewed upgrades proceed normally.
+
+## Invitation auditing and deletion
+
+Invitation creation, resend and acceptance each write their audit event inside
+the same PostgreSQL transaction as their state change. Creation also includes the
+user, role mirror and email-outbox intent. An audit-write failure rolls back all
+of those changes; a failed resend preserves the previous usable token, and a
+failed acceptance preserves the token and leaves the password unset. Audit
+events retain the caller and request metadata; acceptance records the invited
+user as actor. The service does not add a second best-effort copy after commit.
+
+Deleting a Quantum merchant owner returns `409 user_has_merchant`. Use
+**Deactivate** in Users & access to revoke sign-in/session access while retaining
+merchant and payment history. The delete dialog displays the server's
+deactivation guidance. Other user deletion and last-admin/self-protection rules
+are unchanged. Add-user form validation accepts only the three current role
+codes, including supported multi-role combinations, and rejects legacy/unknown
+codes and duplicate selections.
 
 ## Enforcement audit (19 November 2026)
 
@@ -128,7 +169,7 @@ continues to reject cross-user reads, downloads, photo assignment and deletion.
 | POST | `/api/v1/auth/invitations/inspect` | public, rate limited | Body `{token}` → `{email, first_name, expires_at}`, or `404 invitation_invalid` |
 | POST | `/api/v1/auth/invitations/accept` | public, rate limited | Body `{token, password}` (exactly 10 characters) sets the password once → `{email}` |
 | PUT | `/api/v1/users/:id/roles` | `users:write` | Body `{"roles": ["ACCOUNTANT"]}` replaces the role set |
-| DELETE | `/api/v1/users/:id` | `users:write` | Permanently deletes the user (204); sessions, roles, invitations, contacts and attachment records cascade. `409 cannot_delete_self`, `409 last_admin` |
+| DELETE | `/api/v1/users/:id` | `users:write` | Permanently deletes the user (204); sessions, roles, invitations, contacts and attachment records cascade. `409 cannot_delete_self`, `409 last_admin`, `409 user_has_merchant` (deactivate to retain merchant/payment history) |
 | POST | `/api/v1/users/:id/deactivate` | `users:write` | Blocks sign-in and signs the user out everywhere; account and history are kept. `409 cannot_deactivate_self`, `409 last_admin` |
 | POST | `/api/v1/users/:id/activate` | `users:write` | Allows the user to sign in again |
 | GET | `/api/v1/audit/events` | `audit:read` | Paged audit log, newest first: `?action=`, `?q=` (actor/target email), `?limit=` (1–200, default 50), `?offset=` |

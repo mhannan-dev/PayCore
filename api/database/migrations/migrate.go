@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -14,6 +15,10 @@ import (
 
 //go:embed *.sql
 var sqlFiles embed.FS
+
+// ErrLegacyRoleReview prevents broadening legacy operational roles into ADMIN
+// without an explicit account mapping before migration 026.
+var ErrLegacyRoleReview = errors.New("migration 026 requires explicit mapping of LEAD_OPERATOR and STAFF_ENGINEER users to ADMIN, OPERATOR (future ACCOUNTANT), or COMPLIANCE_AUDITOR before upgrading")
 
 type migration struct {
 	version int
@@ -64,6 +69,20 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 		if applied {
 			continue
+		}
+		if step.version == 26 {
+			// Older running APIs must not add a legacy role between this check and
+			// the role conversion. The lock is held through migration commit.
+			if _, err = tx.Exec(ctx, "LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE"); err != nil {
+				return err
+			}
+			var legacy bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE roles && ARRAY['LEAD_OPERATOR','STAFF_ENGINEER']::TEXT[])`).Scan(&legacy); err != nil {
+				return err
+			}
+			if legacy {
+				return ErrLegacyRoleReview
+			}
 		}
 		contents, err := sqlFiles.ReadFile(step.name)
 		if err != nil {

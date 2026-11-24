@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -73,6 +74,9 @@ func TestFreshAndLegacyUserSchema(t *testing.T) {
 					t.Fatal(err)
 				}
 				if legacyVersion == 2 {
+					if _, err = pool.Exec(ctx, "UPDATE users SET role = 'STAFF_ENGINEER'"); err != nil {
+						t.Fatal(err)
+					}
 					profileSQL, err := sqlFiles.ReadFile("002_user_profile_fields.sql")
 					if err != nil {
 						t.Fatal(err)
@@ -86,6 +90,20 @@ func TestFreshAndLegacyUserSchema(t *testing.T) {
 					if _, err = pool.Exec(ctx, "UPDATE users SET photo = 'https://example.test/legacy-photo.png'"); err != nil {
 						t.Fatal(err)
 					}
+				}
+			}
+			if legacy {
+				if err := Apply(ctx, pool); !errors.Is(err, ErrLegacyRoleReview) {
+					t.Fatalf("unreviewed legacy promotion must be blocked: %v", err)
+				}
+				var version int
+				if err := pool.QueryRow(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil || version != legacyVersion {
+					t.Fatalf("blocked upgrade must roll back migrations: version=%d error=%v", version, err)
+				}
+				// Explicitly choose the conservative operational role in the old
+				// schema; migration 026 will rename it to ACCOUNTANT.
+				if _, err := pool.Exec(ctx, "UPDATE users SET role = 'OPERATOR'"); err != nil {
+					t.Fatal(err)
 				}
 			}
 			if err := Apply(ctx, pool); err != nil {
@@ -123,9 +141,6 @@ func TestFreshAndLegacyUserSchema(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectedRole := "ACCOUNTANT"
-			if legacy {
-				expectedRole = "ADMIN"
-			}
 			if len(roles) != 1 || roles[0] != expectedRole {
 				t.Fatal("default role or legacy role migration failed")
 			}

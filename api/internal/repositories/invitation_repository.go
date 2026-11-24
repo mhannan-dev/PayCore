@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"paycore/api/internal/audit"
 	"paycore/api/internal/models"
 )
 
@@ -62,6 +63,9 @@ func (r *InvitationRepository) CreateInvitedUser(ctx context.Context, firstName 
 	if err := insertEmail(ctx, tx, models.EmailInvitation, models.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
 		return models.ManagedUser{}, err
 	}
+	if err := insertAudit(ctx, tx, audit.Event{Action: audit.UserInvited, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email), Details: audit.Details{RolesAfter: u.Roles}}); err != nil {
+		return models.ManagedUser{}, err
+	}
 	return u, tx.Commit(ctx)
 }
 
@@ -92,6 +96,9 @@ func (r *InvitationRepository) ReissueInvitation(ctx context.Context, userID str
 		return models.ManagedUser{}, err
 	}
 	if err := insertEmail(ctx, tx, models.EmailInvitation, models.EmailRecipient{ID: u.ID, Email: u.Email, FirstName: u.FirstName}, tokenHash, expires, draft...); err != nil {
+		return models.ManagedUser{}, err
+	}
+	if err := insertAudit(ctx, tx, audit.Event{Action: audit.InvitationResent, TargetID: audit.Ptr(u.ID), TargetEmail: audit.Ptr(u.Email)}); err != nil {
 		return models.ManagedUser{}, err
 	}
 	return u, tx.Commit(ctx)
@@ -134,6 +141,9 @@ func (r *InvitationRepository) AcceptInvitation(ctx context.Context, tokenHash [
 	}
 	// Any other outstanding links for this user stop working.
 	if _, err := tx.Exec(ctx, "DELETE FROM user_invitations WHERE user_id = $1 AND used_at IS NULL", userID); err != nil {
+		return "", err
+	}
+	if err := insertAudit(ctx, tx, audit.Event{Action: audit.InvitationAccepted, ActorID: audit.Ptr(userID), ActorEmail: audit.Ptr(email), TargetID: audit.Ptr(userID), TargetEmail: audit.Ptr(email)}); err != nil {
 		return "", err
 	}
 	return email, tx.Commit(ctx)

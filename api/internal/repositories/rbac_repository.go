@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"paycore/api/internal/audit"
 	"paycore/api/internal/models"
@@ -112,6 +113,9 @@ func (r *RBACRepository) FindRolesByUserID(ctx context.Context, userID string) (
 
 // ErrLastAdmin is returned when a change would leave no active ADMIN.
 var ErrLastAdmin = errors.New("at least one active administrator is required")
+
+// ErrUserHasMerchant preserves merchant/payment history when removing an owner.
+var ErrUserHasMerchant = errors.New("user owns a Quantum merchant profile")
 
 // ListRoleDetails returns every role with its permission codes and active-user count.
 func (r *RBACRepository) ListRoleDetails(ctx context.Context) ([]models.RoleDetail, error) {
@@ -246,6 +250,10 @@ func (r *RBACRepository) DeleteUser(ctx context.Context, userID string) error {
 	var email string
 	var roles []string
 	if err := tx.QueryRow(ctx, "DELETE FROM users WHERE id = $1 RETURNING email, roles", userID).Scan(&email, &roles); err != nil {
+		var constraint *pgconn.PgError
+		if errors.As(err, &constraint) && constraint.Code == "23503" && constraint.ConstraintName == "quantum_merchants_owner_user_id_fkey" {
+			return ErrUserHasMerchant
+		}
 		return notFound(err, ErrUserNotFound)
 	}
 	var admins int

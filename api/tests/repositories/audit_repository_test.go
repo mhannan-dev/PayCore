@@ -82,7 +82,7 @@ func TestAuditTrail(t *testing.T) {
 		t.Fatal(err)
 	}
 	history, n, err := log.List(ctx, repositories.AuditQuery{Search: "MEMBER@", Limit: 10})
-	if err != nil || n != 4 { // roles_changed, deactivated, activated, deleted
+	if err != nil || n != 5 { // invitation, roles_changed, deactivated, activated, deleted
 		t.Fatalf("history after delete: %d %v", n, err)
 	}
 	if history[0].Action != audit.UserDeleted || !slices.Equal(history[0].Details.RolesBefore, []string{"ACCOUNTANT", "COMPLIANCE_AUDITOR"}) {
@@ -100,7 +100,7 @@ func TestAuditTrail(t *testing.T) {
 			t.Fatalf("%q must be rejected", stmt)
 		}
 	}
-	if _, total, _ := log.List(ctx, repositories.AuditQuery{Limit: 1}); total != 5 { // 4 user events + 1 login failure
-		t.Fatalf("expected 5 events to survive, got %d", total)
+	if _, total, _ := log.List(ctx, repositories.AuditQuery{Limit: 1}); total != 7 { // 2 invitations + 4 user events + 1 login failure
+		t.Fatalf("expected 7 events to survive, got %d", total)
 	}
 }

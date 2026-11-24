@@ -274,6 +274,11 @@ Test-only contracts from the same report: `MockUSD8` deploys for 753,801 gas and
 
 ## Deployment
 
+For the PowerShell dry-run, wallet-owner broadcast and checked evidence export,
+follow [the deployment handoff](../../contracts/DEPLOYMENT.md). The deploy script
+now rejects non-Aevum chains, missing token code and non-six-decimal tokens before
+broadcasting. These checks do not establish a live deployment.
+
 No deployment was performed for this work. Dependency strategy: `contracts/lib/` is git-ignored and restored with the documented `forge install` command rather than git submodules. The intended administrator flow is:
 
 1. Install Foundry and run `foundryup`.
@@ -331,7 +336,9 @@ Frontend and relayer work for later:
 
 ## Open items
 
-- The DoraHacks rules page must be read manually before any prize or eligibility claim.
+- Eligibility is not confirmed. The submission repository must obtain written
+  organizer approval or use the standalone clean-room option described in
+  [ELIGIBILITY.md](ELIGIBILITY.md).
 - The P0 Go API and browser checkout still use direct `transfer(receiver, amount)`; this contract is not wired into them.
 - Mandate approval is an owner action in the contract. Product UI, indexing, notifications and audit integration remain future work.
 - Any production use needs a fresh audit against the deployed tUSD8 implementation and a reviewed decision on timestamp/day-boundary tolerance.
