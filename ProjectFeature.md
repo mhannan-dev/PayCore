@@ -111,8 +111,7 @@ PayCore/
 │
 ├── docs/                            # Documentation & Architecture Decision Records (ADRs)
 │   ├── adr/                         # Architecture Decision Records
-│   ├── microservices_architecture_bn.md # Service boundaries, data ownership, rollout
-│   └── interview_strategy_bn.md     # Bengali Japan-market interview prep & career guide
+│   └── microservices_architecture_bn.md # Service boundaries, data ownership, rollout
 ├── run.ps1                          # Existing local API + web launcher; selects available ports
 ├── docker-compose.yml               # Planned infrastructure and service profiles
 └── ProjectFeature.md                # System specification & feature roadmap
