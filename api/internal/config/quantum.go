@@ -5,11 +5,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"paycore/api/internal/models"
 )
 
 type QuantumConfig struct {
+	ClockSkew time.Duration
 	Public          models.QuantumConfig
 	RPCURL          string
 	CheckoutBaseURL string
@@ -67,5 +69,11 @@ func ParseQuantum(get func(string) string) (QuantumConfig, error) {
 	}
 	c = QuantumConfig{Public: models.QuantumConfig{Enabled: true, ChainID: chain, TokenAddress: token, TokenSymbol: "tUSD8", TokenDecimals: decimals, ExplorerURL: explorer, MinConfirmations: confirmations}, RPCURL: rpc, CheckoutBaseURL: checkout}
 	c.Public.PaymentContractAddress = paymentContract
+	c.ClockSkew = time.Minute
+	if raw:=strings.TrimSpace(get("QUANTUM_CLOCK_SKEW"));raw!="" {
+		skew,e:=time.ParseDuration(raw)
+		if e!=nil || skew<0 || skew>5*time.Minute { return QuantumConfig{},errors.New("QUANTUM_CLOCK_SKEW must be between 0s and 5m") }
+		c.ClockSkew=skew
+	}
 	return c, nil
 }

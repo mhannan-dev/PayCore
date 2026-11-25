@@ -15,7 +15,7 @@ func contractMovedTokens(transfers []models.QuantumTransfer, token, contract str
 	return false
 }
 
-func evaluateQuantumContractPayment(w models.QuantumWork, r models.QuantumReceipt, minimum int64) models.QuantumDecision {
+func evaluateQuantumContractPayment(w models.QuantumWork, r models.QuantumReceipt, minimum int64, skew time.Duration) models.QuantumDecision {
 	i := w.Invoice.Invoice
 	if i.PaymentContractAddress == nil || r.TxRecipient != *i.PaymentContractAddress {
 		return quantumRejection(models.QuantumWrongContract, true)
@@ -60,7 +60,7 @@ func evaluateQuantumContractPayment(w models.QuantumWork, r models.QuantumReceip
 	if !contractMovedTokens(r.Transfers, i.TokenAddress, *i.PaymentContractAddress, *match) {
 		return quantumRejection(models.QuantumWrongToken, true)
 	}
-	if r.BlockTime.After(i.ExpiresAt) || r.BlockTime.Before(w.Attempt.CreatedAt.Truncate(time.Second)) {
+	if r.BlockTime.After(i.ExpiresAt) || r.BlockTime.Before(w.Attempt.CreatedAt.Truncate(time.Second).Add(-skew)) {
 		return quantumRejection(models.QuantumLate, true)
 	}
 	if r.Confirmations < minimum {

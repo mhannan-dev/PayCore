@@ -249,6 +249,9 @@ type QuantumInvoicePaid struct {
 }
 
 type QuantumWork struct {
+	ReorgSuspicions int
+	ReorgSince *time.Time
+	ConfirmedAt *time.Time
 	Invoice      QuantumInvoiceRecord
 	Attempt      QuantumAttempt
 	LeaseID      string
@@ -256,6 +259,10 @@ type QuantumWork struct {
 	Failures     int
 }
 type QuantumDecision struct {
+	ReorgSuspicions int
+	ReorgSince *time.Time
+	PreserveObservation bool
+	Finalized bool
 	Status     QuantumAttemptStatus
 	Failure    *QuantumFailure
 	Receipt    QuantumReceipt

@@ -139,10 +139,16 @@ type QuantumVerifierWorker struct {
 	store    QuantumVerificationStore
 	verifier TransferVerifier
 	minimum  int64
+	clockSkew time.Duration
 }
 
 func NewQuantumVerifierWorker(store QuantumVerificationStore, verifier TransferVerifier, minimum int64) *QuantumVerifierWorker {
-	return &QuantumVerifierWorker{store: store, verifier: verifier, minimum: minimum}
+	return &QuantumVerifierWorker{store: store, verifier: verifier, minimum: minimum, clockSkew: time.Minute}
+}
+
+func (w *QuantumVerifierWorker) WithClockSkew(skew time.Duration) *QuantumVerifierWorker {
+	if skew >= 0 && skew <= 5*time.Minute { w.clockSkew = skew }
+	return w
 }
 func quantumRejection(code models.QuantumFailure, review bool) models.QuantumDecision {
 	status := models.QuantumFailed
@@ -153,20 +159,22 @@ func quantumRejection(code models.QuantumFailure, review bool) models.QuantumDec
 }
 
 // EvaluateQuantumReceipt is pure: only canonical, exactly attributed transfers can settle.
-func EvaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minimum int64, now time.Time) models.QuantumDecision {
-	decision := evaluateQuantumReceipt(w, r, minimum, now)
+func EvaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minimum int64, now time.Time, configuredSkew ...time.Duration) models.QuantumDecision {
+	skew := time.Minute
+	if len(configuredSkew)>0 && configuredSkew[0]>=0 && configuredSkew[0]<=5*time.Minute { skew=configuredSkew[0] }
+	if w.Attempt.Status == models.QuantumConfirmed && r.ChainID == w.Invoice.Invoice.ChainID {
+		return recheckQuantumConfirmation(w,r,minimum,now,skew)
+	}
+	decision := evaluateQuantumReceipt(w, r, minimum, now, skew)
 	if w.Attempt.Status == models.QuantumConfirmed && r.ChainID == w.Invoice.Invoice.ChainID && (decision.Status == models.QuantumFailed || decision.Status == models.QuantumReview) {
 		return models.QuantumDecision{Status: models.QuantumReorged, Reorg: true, Receipt: r, RetryAfter: 3 * time.Second}
 	}
 	return decision
 }
-func evaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minimum int64, now time.Time) models.QuantumDecision {
+func evaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minimum int64, now time.Time, skew time.Duration) models.QuantumDecision {
 	i := w.Invoice.Invoice
 	if r.ChainID != i.ChainID {
 		return quantumRejection(models.QuantumWrongChain, false)
-	}
-	if w.Attempt.Status == models.QuantumConfirmed && (!r.Found || !r.Canonical || !r.Success || w.ObservedHash == nil || *w.ObservedHash != r.BlockHash || r.Confirmations < minimum) {
-		return models.QuantumDecision{Status: models.QuantumReorged, Reorg: true, RetryAfter: 3 * time.Second, Receipt: r}
 	}
 	wait := models.QuantumDecision{Status: models.QuantumVerifying, Receipt: r, RetryAfter: 3 * time.Second}
 	if !r.Found || !r.Canonical {
@@ -182,7 +190,7 @@ func evaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minim
 		return quantumRejection(models.QuantumTxFailed, false)
 	}
 	if i.PaymentContractAddress != nil {
-		return evaluateQuantumContractPayment(w, r, minimum)
+		return evaluateQuantumContractPayment(w, r, minimum, skew)
 	}
 	candidates := []models.QuantumTransfer{}
 	for _, t := range r.Transfers {
@@ -224,7 +232,7 @@ func evaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minim
 	if match.Amount < int64(i.AmountBaseUnits) {
 		return quantumRejection(models.QuantumUnderpaid, true)
 	}
-	if r.BlockTime.After(i.ExpiresAt) || r.BlockTime.Before(w.Attempt.CreatedAt.Truncate(time.Second)) {
+	if r.BlockTime.After(i.ExpiresAt) || r.BlockTime.Before(w.Attempt.CreatedAt.Truncate(time.Second).Add(-skew)) {
 		return quantumRejection(models.QuantumLate, true)
 	}
 	if r.Confirmations < minimum {
@@ -245,6 +253,12 @@ func (w *QuantumVerifierWorker) ProcessBatch(ctx context.Context) error {
 		receipt, verifyErr := w.verifier.Verify(callCtx, *job.Attempt.TxHash)
 		cancel()
 		if verifyErr != nil || (job.Attempt.Status == models.QuantumConfirmed && receipt.ChainID != job.Invoice.Invoice.ChainID) {
+			if job.Attempt.Status == models.QuantumConfirmed {
+				missing := models.QuantumReceipt{ChainID:job.Invoice.Invoice.ChainID}
+				d := EvaluateQuantumReceipt(job,missing,w.minimum,time.Now().UTC(),w.clockSkew)
+				if err:=w.store.Apply(ctx,job,d);err!=nil && !errors.Is(err,models.ErrQuantumStale) { return err }
+				continue
+			}
 			delay := 3 * time.Second
 			for n := 0; n < job.Failures && delay < time.Minute; n++ {
 				delay *= 2
@@ -257,7 +271,7 @@ func (w *QuantumVerifierWorker) ProcessBatch(ctx context.Context) error {
 			}
 			continue
 		}
-		decision := EvaluateQuantumReceipt(job, receipt, w.minimum, time.Now().UTC())
+		decision := EvaluateQuantumReceipt(job, receipt, w.minimum, time.Now().UTC(),w.clockSkew)
 		if err := w.store.Apply(ctx, job, decision); err != nil && !errors.Is(err, models.ErrQuantumStale) && !errors.Is(err, models.ErrQuantumDuplicate) {
 			return err
 		}

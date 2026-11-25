@@ -128,7 +128,7 @@ func main() {
 				defer chain.Close()
 				quantumRepo := repositories.NewQuantumRepository(pool)
 				registeredControllers.Quantum = controllers.NewQuantumController(services.NewQuantumService(quantumRepo, cfg.Quantum.Public, cfg.Quantum.CheckoutBaseURL))
-				worker := services.NewQuantumVerifierWorker(quantumRepo, chain, cfg.Quantum.Public.MinConfirmations)
+				worker := services.NewQuantumVerifierWorker(quantumRepo, chain, cfg.Quantum.Public.MinConfirmations).WithClockSkew(cfg.Quantum.ClockSkew)
 				workerCtx, cancel := context.WithCancel(context.Background())
 				quantumCancel = cancel
 				quantumDone = make(chan struct{})
