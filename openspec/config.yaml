@@ -2,33 +2,45 @@ schema: spec-driven
 githubCopilot:
   cloudAgent: false
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+context: |
+  Follow AGENTS.md and docs/coding_rules.md; also read directory-specific instructions for affected code.
+  Before feature implementation, document observable behavior, edge cases, persistence, API contracts, and validation using openspec/README.md.
+  Read the affected source, migrations, DTOs, and tests before describing the current baseline; distinguish implemented behavior from proposals and dated verification evidence.
+  For Quantum work, read PAYCORE_QUANTUM_CODEX_PROMPT.md and its applicable ownership/contract section; it takes precedence over PAYCORE_QUANTUM_EXTENSION_SPEC.md where they disagree. Apply later explicit user decisions and record remaining conflicts.
+  Quantum remains testnet-only and noncustodial. Never request, store, or expose wallet keys or seed phrases; a successful simulation is not a deployed contract or confirmed payment.
+  Resolve decisions affecting behavior, authorization, money, schema, or compatibility before dependent implementation. Record routine decisions with rationale; ask the user only when repository evidence and existing authorization cannot resolve them.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - State the user problem, intended observable outcome, scope, non-goals, affected capabilities, and compatibility impact.
+    - Identify affected source/docs and distinguish verified baseline facts, assumptions, and unresolved decisions. Do not present a future feature or old test result as current implementation evidence.
+    - Identify which edge cases, database changes, API changes, and validation rules need design; explicitly justify any area that is not applicable.
+  specs:
+    - Use SHALL/MUST requirements and named WHEN/THEN scenarios in the schema's required format; specify outcomes that can be verified without reading the implementation.
+    - Cover happy paths and applicable boundary/failure cases, including missing/null/malformed inputs, limits, authorization and ownership, duplicate requests, retries, concurrent updates, invalid state transitions, expiry, and dependency failure. Give a reason for excluded categories.
+    - For money, specify currency/token, units, precision, rounding if applicable, zero/negative handling, and overflow limits; amounts must obey docs/coding_rules.md without float conversion.
+    - Specify rejection outcomes, stable error codes and externally observable side effects, including what must remain unchanged on failure. For Quantum settlement include confirmations, duplicate claims and reorg behavior when affected.
+  design:
+    - Include explicit sections for Decisions, Edge cases, Database schema, API contract, Validation, Migration and compatibility, and Verification. Mark an unaffected section not applicable with a reason rather than inventing changes.
+    - For database changes, list tables/columns with SQL types, nullability, defaults, keys, CHECK/UNIQUE/FK constraints, indexes and ownership scope; explain transaction boundaries, concurrency, migration/backfill order, and a safe rollback or forward-recovery plan. Add SQL sketches or a field table without editing applied migrations.
+    - For each changed endpoint, document method/path, auth/permission/ownership, headers, request/response field types and required/null/omitted semantics, limits, HTTP statuses, and existing error-envelope codes. Include valid request/response and representative invalid examples; specify pagination and idempotency when applicable. Identify the Go DTO and TypeScript mirror paths.
+    - Provide a validation matrix with field or business rule, normalization, accepted values/bounds, enforcement layer, error status/code, and test scenario. Controllers validate shape, services enforce business rules, and database constraints enforce persisted invariants; frontend validation must not be the only enforcement.
+    - Map edge cases to preconditions, action, observable result, persistence/side effects, and scenario names. Decide time boundaries, race winners, retries and partial-failure behavior explicitly when relevant.
+    - Resolve decisions that would alter requirements, schema, API, authorization, or task breakdown before dependent implementation. Only genuinely deferrable questions may remain; record their impact and why they do not block the change.
+  tasks:
+    - Start with a tracked readiness task that verifies the proposal, scenarios, schema, API examples and validation matrix are coherent, applicable areas are documented, and blocking decisions are resolved before dependent implementation.
+    - Use dependency-ordered checkbox tasks in the schema's numbered format. Each task must name its deliverable and verification; identify affected paths and scenario references where useful.
+    - Keep relevant tests and documentation with each implementation group; include schema/migration verification and synchronized Go/TypeScript contracts whenever affected.
+    - Include the required repository checks from AGENTS.md and docs/coding_rules.md; add contracts or integration checks when affected. Record the actual command, revision, result and any skipped or blocked coverage without claiming unrun checks passed.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+# These are agent instructions, not an automatic semantic completeness gate.
+operations:
+  apply:
+    guidance:
+      - Read openspec/README.md and the change artifacts before code changes. Complete the readiness task first; resolve missing behavior/schema/API/validation decisions before work that depends on them, while continuing independent work.
+      - When implementation changes a documented decision, update the affected specs/design/tasks together and keep the contract mirrors consistent. Mark tasks complete only after their stated verification succeeds.
+      - Run the required repository checks before finishing and report verification limits separately from failures. Never turn simulation artifacts into live deployment evidence.
+  archive:
+    guidance:
+      - Reconcile delivered behavior with the delta specs and design, confirm tracked implementation/verification tasks are complete, and preserve unresolved operational follow-ups explicitly.
+      - Record verification commands, source revision and results; distinguish local tests, RPC simulation, actual deployment and actual payment evidence. Do not claim checks or organizer eligibility that were not confirmed.

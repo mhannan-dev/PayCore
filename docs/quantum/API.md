@@ -158,3 +158,38 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Integration
 ```
 
 This ran `go vet ./...`, all Go tests with PostgreSQL integration enabled and serialized packages, `golangci-lint run` (zero issues), `npm run check`, and all 31 frontend tests. No application code changes were needed to pass this validation.
+
+## Deployment simulation verification — 2026-11-25
+
+Source revision: `70bd775ae5d580799ab1cc1a656c8d48896d6b8e` on `PayCore-Quantum`. The working tree was clean before verification.
+
+The user approved `0x000000000000000000000000000000000000dEaD` as a **simulation-only sender**. It is not a wallet owned by the user and must not be used for a real deployment. No account, private key, seed phrase, signing operation, or broadcast flag was supplied.
+
+```powershell
+# Run from the repository root; omit -Account and -Broadcast.
+powershell -NoProfile -ExecutionPolicy Bypass -File contracts/script/deploy-aevum.ps1 -Sender 0x000000000000000000000000000000000000dEaD
+
+# Offline deployment evidence validation.
+powershell -NoProfile -ExecutionPolicy Bypass -File contracts/test/deployment-tooling.test.ps1
+
+# PostgreSQL integration tests use isolated schemas in the local test database.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Suite api -Integration
+
+cd web
+npm.cmd run check
+npm.cmd test
+```
+
+Results:
+
+- API `go vet ./...`, all Go tests with PostgreSQL integration enabled, and `golangci-lint run` passed; lint reported zero issues. The first sandboxed attempt could not open localhost sockets; rerunning with local-network access passed without application changes.
+- Frontend TypeScript and ESLint checks passed; all 42 frontend tests passed.
+- All nine deployment tooling checks passed, including rejection of wrong-chain, failed, reorged, unconfirmed, missing-code, wrong-token and wrong-decimal evidence, verified metadata export, and preservation of existing evidence.
+- Foundry 1.10.0 built the contracts with Solidity 0.8.24. All 25 contract tests passed. The token-custody invariant completed 256 runs and 128,000 calls.
+- The live Aevum RPC fork simulation succeeded on chain `44005`, using tUSD8 `0x456569838f1d43009A91ebA4263147Afd7233483`. These parameters were rechecked against the official [chain reference](https://wiki.qday.info/Knowledge/reference/chains) and [token reference](https://wiki.qday.info/Knowledge/reference/tokens).
+- Estimated deployment gas was 1,873,713 units. This is a simulation estimate, not a gas payment or a funding requirement for a particular wallet.
+- The ignored public artifact `contracts/broadcast/Deploy.s.sol/44005/dry-run/run-latest.json` contained one simulated transaction and zero receipts. Foundry reported `SIMULATION COMPLETE`; the wrapper confirmed that no transaction was broadcast.
+
+The predicted address from this simulation is not a deployed contract and must not populate `QUANTUM_PAYMENT_CONTRACT_ADDRESS` or deployment evidence. No sensitive Foundry cache content is included here. Explorer source verification and a wallet payment were not performed.
+
+The next deployment step requires a user-controlled testnet wallet following [the deployment runbook](../../contracts/DEPLOYMENT.md). Export deployment evidence only after an actual mined transaction passes that runbook's receipt, canonical-block, confirmation, code, token and decimal checks. A live payment demonstration and organizer eligibility confirmation remain outstanding; the [eligibility status](ELIGIBILITY.md) remains **NOT CONFIRMED**.

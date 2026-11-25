@@ -37,6 +37,10 @@ func TestQuantumContractAttribution(t *testing.T) {
 		{"overpaid", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Payments[0].Amount++ }, models.QuantumOverpaid},
 		{"overflow", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Payments[0].Overflow = true }, models.QuantumOverpaid},
 		{"duplicate events", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Payments = append(r.Payments, r.Payments[0]) }, models.QuantumDuplicateTransfer},
+		{"event without token movement", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Transfers = nil }, models.QuantumWrongToken},
+		{"token moved to another address", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Transfers[0].To = quantumPayer }, models.QuantumWrongToken},
+		{"token moved a different amount", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Transfers[0].Amount-- }, models.QuantumWrongToken},
+		{"another token moved", func(_ *models.QuantumWork, r *models.QuantumReceipt) { r.Transfers[0].Token = quantumReceiver }, models.QuantumWrongToken},
 		{"expired", func(w *models.QuantumWork, r *models.QuantumReceipt) {
 			r.BlockTime = w.Invoice.Invoice.ExpiresAt.Add(1)
 		}, models.QuantumLate},
@@ -50,6 +54,18 @@ func TestQuantumContractAttribution(t *testing.T) {
 				t.Fatalf("decision: %+v", d)
 			}
 		})
+	}
+}
+
+// payWithAuthorization pulls funds into the contract, then forwards them.
+func TestQuantumContractForwardedTransferSettles(t *testing.T) {
+	w, r := contractProof()
+	r.Transfers = []models.QuantumTransfer{
+		{Token: quantumToken, From: quantumPayer, To: *w.Invoice.Invoice.PaymentContractAddress, Amount: 1250000},
+		{Token: quantumToken, From: *w.Invoice.Invoice.PaymentContractAddress, To: quantumReceiver, Amount: 1250000},
+	}
+	if d := services.EvaluateQuantumReceipt(w, r, 2, r.BlockTime); d.Status != models.QuantumConfirmed {
+		t.Fatalf("forwarded contract payment rejected: %+v", d)
 	}
 }
 

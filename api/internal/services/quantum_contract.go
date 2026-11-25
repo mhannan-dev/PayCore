@@ -6,6 +6,15 @@ import (
 	"paycore/api/internal/models"
 )
 
+func contractMovedTokens(transfers []models.QuantumTransfer, token, contract string, paid models.QuantumInvoicePaid) bool {
+	for _, t := range transfers {
+		if t.Token == token && t.To == paid.Merchant && !t.Overflow && t.Amount == paid.Amount && (t.From == paid.Payer || t.From == contract) {
+			return true
+		}
+	}
+	return false
+}
+
 func evaluateQuantumContractPayment(w models.QuantumWork, r models.QuantumReceipt, minimum int64) models.QuantumDecision {
 	i := w.Invoice.Invoice
 	if i.PaymentContractAddress == nil || r.TxRecipient != *i.PaymentContractAddress {
@@ -44,6 +53,12 @@ func evaluateQuantumContractPayment(w models.QuantumWork, r models.QuantumReceip
 	}
 	if match.Amount < int64(i.AmountBaseUnits) {
 		return quantumRejection(models.QuantumUnderpaid, true)
+	}
+	// Defense in depth: the event alone is not money. The same receipt must show
+	// the configured token moving the exact amount to the merchant, from the payer
+	// (pay, agentPay) or from the contract (payWithAuthorization forwards funds).
+	if !contractMovedTokens(r.Transfers, i.TokenAddress, *i.PaymentContractAddress, *match) {
+		return quantumRejection(models.QuantumWrongToken, true)
 	}
 	if r.BlockTime.After(i.ExpiresAt) || r.BlockTime.Before(w.Attempt.CreatedAt.Truncate(time.Second)) {
 		return quantumRejection(models.QuantumLate, true)

@@ -44,7 +44,11 @@ Only canonical, correctly padded `InvoicePaid` logs from that stored address can
 settle these invoices. Order, payer, merchant, amount, direct transaction signer,
 recipient, expiry and confirmations are checked; the event log index is reserved
 in the same atomic claim store. ERC-20 approval and Transfer logs alone do not
-settle contract invoices. Relayer/agent UX is outside this integration. The open
+settle contract invoices, and neither does `InvoicePaid` alone: the same receipt
+must also contain a configured-token `Transfer` of the exact amount to the
+merchant, from the payer or from the contract (which forwards
+`payWithAuthorization` funds). A misconfigured or faulty contract that emits the
+event without moving tokens therefore yields `REVIEW_REQUIRED` (`wrong_token`). Relayer/agent UX is outside this integration. The open
 browser page can retry hash submission without paying again; durable lost-hash
 recovery remains unimplemented.
 
