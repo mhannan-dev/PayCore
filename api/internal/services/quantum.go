@@ -98,7 +98,7 @@ func (s *QuantumService) Checkout(ctx context.Context, token string) (models.Qua
 		return models.QuantumCheckout{}, err
 	}
 	i := r.Invoice
-	return models.QuantumCheckout{MerchantName: r.MerchantName, Description: i.Description, AmountBaseUnits: i.AmountBaseUnits, ChainID: i.ChainID, TokenAddress: i.TokenAddress, TokenSymbol: s.config.TokenSymbol, TokenDecimals: r.TokenDecimals, ReceiverAddress: i.ReceiverAddress, Status: i.Status, ExpiresAt: i.ExpiresAt, ExplorerURL: r.ExplorerURL}, nil
+	return models.QuantumCheckout{OrderID: i.OrderID, PaymentContractAddress: i.PaymentContractAddress, MerchantName: r.MerchantName, Description: i.Description, AmountBaseUnits: i.AmountBaseUnits, ChainID: i.ChainID, TokenAddress: i.TokenAddress, TokenSymbol: s.config.TokenSymbol, TokenDecimals: r.TokenDecimals, ReceiverAddress: i.ReceiverAddress, Status: i.Status, ExpiresAt: i.ExpiresAt, ExplorerURL: r.ExplorerURL}, nil
 }
 func (s *QuantumService) CheckoutStatus(ctx context.Context, token string) (models.QuantumCheckoutStatus, error) {
 	if !validCheckoutToken(token) {
@@ -180,6 +180,9 @@ func evaluateQuantumReceipt(w models.QuantumWork, r models.QuantumReceipt, minim
 	}
 	if !r.Success {
 		return quantumRejection(models.QuantumTxFailed, false)
+	}
+	if i.PaymentContractAddress != nil {
+		return evaluateQuantumContractPayment(w, r, minimum)
 	}
 	candidates := []models.QuantumTransfer{}
 	for _, t := range r.Transfers {

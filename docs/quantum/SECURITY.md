@@ -10,7 +10,17 @@ The payer signs in their own wallet. The API never accepts a private key, recove
 
 Chain ID, token contract code and decimals are checked at startup. Invalid config, unsupported mainnets or RPC startup failure leave Quantum unavailable while PayCore still starts. Configuration values are not hardcoded chain facts. [Official network parameters](https://wiki.qday.info/Knowledge/reference/chains) and [token addresses](https://wiki.qday.info/Knowledge/reference/tokens) were checked on 2026-11-22 and must be rechecked before demo deployment. The mainnet denylist is a guard, not a universal classifier of all possible networks; use only a trusted, verified testnet endpoint.
 
-The RPC is an explicit trust dependency. P0 is not a consensus-verifying light client and cannot prove honesty of a malicious configured node. It checks chain identity on verification, receipt and transaction hashes, the signed transaction's chain and signer, canonical header/hash and block number, log transaction/block context, removed-log flags, configured emitter, Transfer topic, ABI address padding, recipient, sender, bounded amount and confirmation depth. Native transfers, wrong-contract logs, partial transfers, malformed logs, int64 overflow, duplicate matching logs and insufficient confirmations cannot settle an invoice. It supports direct wallet-to-token transfers; smart-account batching and transferFrom flows are outside P0.
+The RPC is an explicit trust dependency. Quantum is not a consensus-verifying light
+client and cannot prove honesty of a malicious configured node. It checks chain
+identity, receipt and transaction hashes, transaction chain and signer, canonical
+header/hash and block number, log transaction/block context, removed-log flags,
+event signature, ABI address padding, recipient, payer, bounded amount and
+confirmation depth. Native transfers, wrong-contract logs, partial payments,
+malformed logs, int64 overflow, duplicate matching logs and insufficient
+confirmations cannot settle an invoice. Direct token transfers remain supported
+for null-address invoices; configured contract invoices use the direct `pay()`
+flow described below. Smart-account batching and relayed payments are outside
+this integration.
 
 ## Authorization and money correctness
 
@@ -25,6 +35,18 @@ Unused intent expiry is enforced on hash submission as well as readmission. Both
 Confirmation is one database transaction: invoice row lock, leased-attempt check, unique transfer claim, attempt state, invoice state and durable outbox enqueue. The unique event key prevents the same event paying two invoices; a partial unique index allows one canonical claim per invoice. Lease fencing prevents a late worker committing over a newer worker. Invoice cancellation racing confirmation yields a consistent paid or cancelled/review result; cancellation cannot reverse an already broadcast chain transfer.
 
 ## Reorgs and asynchronous recovery
+
+Contract invoices additionally bind a deterministic order ID and an immutable
+payment-contract address snapshot. Startup checks bytecode and the configured
+contract's `token()` getter against the token configuration; operators must use a
+reviewed deployment, since these checks do not attest arbitrary contract source.
+Only canonical, correctly padded `InvoicePaid` logs from that stored address can
+settle these invoices. Order, payer, merchant, amount, direct transaction signer,
+recipient, expiry and confirmations are checked; the event log index is reserved
+in the same atomic claim store. ERC-20 approval and Transfer logs alone do not
+settle contract invoices. Relayer/agent UX is outside this integration. The open
+browser page can retry hash submission without paying again; durable lost-hash
+recovery remains unimplemented.
 
 Broadcasting returns 202 only. RPC errors retain state and back off; missing transactions are retried before the bounded not-found policy applies. At least the configured confirmations are required before PAID. Confirmed payments are monitored for 24 hours. Canonical receipt loss/change invalidates the claim, changes the attempt to REORGED, reopens only an unclaimed invoice, and appends an audit record in the same transaction. Claim history is never released for use by another invoice. Reinclusion can reconfirm the original invoice. No finite confirmation threshold guarantees finality; deeper/later reorgs require administrator investigation and a production indexer.
 

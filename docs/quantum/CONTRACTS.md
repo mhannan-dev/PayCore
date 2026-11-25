@@ -1,6 +1,11 @@
 # Quantum smart contracts
 
-Part D adds a standalone Foundry project under [`contracts/`](../../contracts/). It is separate from the Go API and TypeScript frontend: no imports cross that boundary, and Part D does not change API behaviour or P0 checkout. The contracts are **testnet-only** and **not deployed as part of this work**. No live transaction or testnet payment was made. For the P0 flow, see [ARCHITECTURE.md](ARCHITECTURE.md); for the product-level mandate proposal, see [AGENT_MANDATE.md](AGENT_MANDATE.md).
+The Foundry project under [`contracts/`](../../contracts/) implements testnet-only
+payments. Direct contract checkout is integrated into the Go API and browser
+through the optional `QUANTUM_PAYMENT_CONTRACT_ADDRESS` setting; see
+[the API integration notes](API.md#contract-checkout-integration). No live deployment
+or payment is established by this integration. Mandate and relayer product flows
+remain separate work.
 
 ## Toolchain and dependencies
 
@@ -303,9 +308,11 @@ The user must fill this table after deploying and verifying on the explorer:
 
 ## Part E checklist
 
-Part E is backend/frontend integration after the human deploys the contract. It must not be mixed into Part D.
+Part E implements direct contract checkout and verification. Live operation still
+requires a reviewed deployment and wallet-owner signing; the integration can be
+validated offline without broadcasting.
 
-A3 fields to add in the same commit as the Go change, then mirror in `web/src/lib/quantum-api.ts`:
+Implemented shared fields, mirrored in `web/src/lib/quantum-api.ts`:
 
 - `QuantumConfig.payment_contract_address: string | null` — lower-case deployed contract address; `null` until configured.
 - `Invoice.order_id: string` — `0x` + 64 hex characters from the backend derivation above.
@@ -313,13 +320,13 @@ A3 fields to add in the same commit as the Go change, then mirror in `web/src/li
 - `Checkout.order_id: string` — so the wallet/relayer can call the contract without re-deriving the UUID.
 - `Checkout.payment_contract_address: string | null` — same value as config/invoice, mirrored for public clients.
 
-Worker and API changes:
+Implemented worker and API behavior:
 
 - Watch `InvoicePaid` only from the configured contract address, with `orderId` matching a stored invoice.
 - Treat the event as a confirmation signal but keep the existing attempt state machine, confirmations and review paths.
 - Verify `payer`, `merchant` and `amount` in the log against the registered attempt and invoice before marking `PAID`.
 - Store the event transaction hash and log index for idempotent claim, mirroring today's canonical `Transfer` verification.
-- Add the A3 fields to Go models, SQL columns/constraints and TypeScript mirrors together.
+- Shared fields are implemented in Go and TypeScript. Migration 029 persists the contract address; order ID is derived from the immutable invoice UUID.
 
 Event ABI for the indexer:
 
@@ -330,7 +337,7 @@ topic0 = 0x65ec4a5912fa4e274d3e8ff427bbdf1ea781c81dad15250fba4f80d7a7b00842
 
 Frontend and relayer work for later:
 
-- Public checkout should prepare `orderId`, payer, merchant and amount from A3, then choose direct `pay` or relayed `payWithAuthorization`.
+- Public checkout uses the API-provided order ID and snapshot for direct `pay`. Relayed `payWithAuthorization` remains future work.
 - No gasless relayer service exists yet; a relayer needs signing support for the EIP-712 domain and the exact bound nonce.
 - Agent mandate UI, approval UX and mandate audit indexing remain future work.
 
@@ -339,6 +346,6 @@ Frontend and relayer work for later:
 - Eligibility is not confirmed. The submission repository must obtain written
   organizer approval or use the standalone clean-room option described in
   [ELIGIBILITY.md](ELIGIBILITY.md).
-- The P0 Go API and browser checkout still use direct `transfer(receiver, amount)`; this contract is not wired into them.
+- Direct `pay()` is wired into the API and browser when configured. Existing null-address invoices continue using `transfer(receiver, amount)`.
 - Mandate approval is an owner action in the contract. Product UI, indexing, notifications and audit integration remain future work.
 - Any production use needs a fresh audit against the deployed tUSD8 implementation and a reviewed decision on timestamp/day-boundary tolerance.

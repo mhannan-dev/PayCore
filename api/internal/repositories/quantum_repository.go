@@ -32,14 +32,15 @@ func NewQuantumRepository(pool *pgxpool.Pool) *QuantumRepository {
 	return &QuantumRepository{pool: pool}
 }
 
-const quantumInvoiceColumns = `i.id,i.description,i.amount_base_units,i.chain_id,i.token_address,i.receiver_address,i.status,i.checkout_url,i.expires_at,i.paid_at,i.paid_tx_hash,i.created_at,i.merchant_id,m.owner_user_id,m.display_name,i.checkout_token,i.token_decimals,i.explorer_url`
+const quantumInvoiceColumns = `i.id,i.description,i.amount_base_units,i.chain_id,i.token_address,i.receiver_address,i.status,i.checkout_url,i.expires_at,i.paid_at,i.paid_tx_hash,i.created_at,i.merchant_id,m.owner_user_id,m.display_name,i.checkout_token,i.token_decimals,i.explorer_url,i.payment_contract_address`
 const quantumInvoiceFrom = ` FROM quantum_invoices i JOIN quantum_merchants m ON m.id=i.merchant_id`
 const quantumAttemptColumns = `id,payer_address,tx_hash,status,failure_code,confirmations,created_at,updated_at`
 
 func scanQuantumInvoice(row pgx.Row) (models.QuantumInvoiceRecord, error) {
 	var r models.QuantumInvoiceRecord
 	var amount int64
-	err := row.Scan(&r.Invoice.ID, &r.Invoice.Description, &amount, &r.Invoice.ChainID, &r.Invoice.TokenAddress, &r.Invoice.ReceiverAddress, &r.Invoice.Status, &r.Invoice.CheckoutURL, &r.Invoice.ExpiresAt, &r.Invoice.PaidAt, &r.Invoice.PaidTxHash, &r.Invoice.CreatedAt, &r.MerchantID, &r.OwnerID, &r.MerchantName, &r.CheckoutToken, &r.TokenDecimals, &r.ExplorerURL)
+	err := row.Scan(&r.Invoice.ID, &r.Invoice.Description, &amount, &r.Invoice.ChainID, &r.Invoice.TokenAddress, &r.Invoice.ReceiverAddress, &r.Invoice.Status, &r.Invoice.CheckoutURL, &r.Invoice.ExpiresAt, &r.Invoice.PaidAt, &r.Invoice.PaidTxHash, &r.Invoice.CreatedAt, &r.MerchantID, &r.OwnerID, &r.MerchantName, &r.CheckoutToken, &r.TokenDecimals, &r.ExplorerURL, &r.Invoice.PaymentContractAddress)
+	r.Invoice.OrderID = models.QuantumOrderID(r.Invoice.ID)
 	r.Invoice.CreatedAt = r.Invoice.CreatedAt.UTC()
 	r.Invoice.ExpiresAt = r.Invoice.ExpiresAt.UTC()
 	if r.Invoice.PaidAt != nil {
@@ -92,8 +93,8 @@ func (r *QuantumRepository) CreateInvoice(ctx context.Context, actor, key, hash,
 			return 0, nil, err
 		}
 		var id string
-		err = tx.QueryRow(ctx, `INSERT INTO quantum_invoices(merchant_id,checkout_token,description,amount_base_units,chain_id,token_address,receiver_address,token_decimals,explorer_url,checkout_url,expires_at)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+make_interval(mins=>$11)) RETURNING id`, merchant.ID, token, req.Description, int64(req.AmountBaseUnits), chainID, cfg.TokenAddress, merchant.ReceiverAddress, cfg.TokenDecimals, cfg.ExplorerURL, base+"/pay/"+token, req.ExpiresInMinutes).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO quantum_invoices(merchant_id,checkout_token,description,amount_base_units,chain_id,token_address,receiver_address,token_decimals,explorer_url,checkout_url,expires_at,payment_contract_address)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()+make_interval(mins=>$11),$12) RETURNING id`, merchant.ID, token, req.Description, int64(req.AmountBaseUnits), chainID, cfg.TokenAddress, merchant.ReceiverAddress, cfg.TokenDecimals, cfg.ExplorerURL, base+"/pay/"+token, req.ExpiresInMinutes, cfg.PaymentContractAddress).Scan(&id)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -249,7 +250,7 @@ func (r *QuantumRepository) RegisterAttempt(ctx context.Context, token, payer st
 		return models.QuantumAttempt{}, err
 	}
 	var ambiguous bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quantum_payment_attempts a JOIN quantum_invoices i ON i.id=a.invoice_id WHERE a.payer_address=$1 AND i.chain_id=$2 AND i.token_address=$3 AND i.receiver_address=$4 AND i.amount_base_units=$5 AND a.status IN('CREATED','BROADCAST','VERIFYING') AND (a.status<>'CREATED' OR a.created_at>clock_timestamp()-INTERVAL '15 minutes'))`, payer, chainID, rec.Invoice.TokenAddress, rec.Invoice.ReceiverAddress, int64(rec.Invoice.AmountBaseUnits)).Scan(&ambiguous); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM quantum_payment_attempts a JOIN quantum_invoices i ON i.id=a.invoice_id WHERE a.payer_address=$1 AND i.chain_id=$2 AND i.token_address=$3 AND i.receiver_address=$4 AND i.amount_base_units=$5 AND i.payment_contract_address IS NULL AND $6::text IS NULL AND a.status IN('CREATED','BROADCAST','VERIFYING') AND (a.status<>'CREATED' OR a.created_at>clock_timestamp()-INTERVAL '15 minutes'))`, payer, chainID, rec.Invoice.TokenAddress, rec.Invoice.ReceiverAddress, int64(rec.Invoice.AmountBaseUnits), rec.Invoice.PaymentContractAddress).Scan(&ambiguous); err != nil {
 		return models.QuantumAttempt{}, err
 	}
 	if ambiguous {

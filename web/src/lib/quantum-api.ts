@@ -9,6 +9,8 @@ export type AttemptStatus = (typeof QUANTUM_ATTEMPT_STATUSES)[number];
 export const QUANTUM_FAILURE_CODES = [
   "wrong_chain",
   "wrong_token",
+  "wrong_contract",
+  "wrong_order",
   "wrong_recipient",
   "wrong_payer",
   "underpaid",
@@ -21,6 +23,7 @@ export const QUANTUM_FAILURE_CODES = [
 export type FailureCode = (typeof QUANTUM_FAILURE_CODES)[number];
 
 export type QuantumConfig = {
+  payment_contract_address: string | null;
   enabled: boolean;
   chain_id: number;
   token_address: string;
@@ -44,6 +47,8 @@ export type Attempt = {
 };
 
 export type Invoice = {
+  order_id: string;
+  payment_contract_address: string | null;
   id: string;
   description: string;
   amount_base_units: string;
@@ -60,6 +65,8 @@ export type Invoice = {
 };
 
 export type Checkout = {
+  order_id: string;
+  payment_contract_address: string | null;
   merchant_name: string;
   description: string;
   amount_base_units: string;

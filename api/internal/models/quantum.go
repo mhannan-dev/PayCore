@@ -1,11 +1,14 @@
 package models
 
 import (
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/crypto/sha3"
 )
 
 var (
@@ -62,6 +65,8 @@ type QuantumFailure string
 const (
 	QuantumWrongChain        QuantumFailure = "wrong_chain"
 	QuantumWrongToken        QuantumFailure = "wrong_token"
+	QuantumWrongContract     QuantumFailure = "wrong_contract"
+	QuantumWrongOrder        QuantumFailure = "wrong_order"
 	QuantumWrongRecipient    QuantumFailure = "wrong_recipient"
 	QuantumWrongPayer        QuantumFailure = "wrong_payer"
 	QuantumUnderpaid         QuantumFailure = "underpaid"
@@ -74,7 +79,7 @@ const (
 
 func (f QuantumFailure) Valid() bool {
 	switch f {
-	case QuantumWrongChain, QuantumWrongToken, QuantumWrongRecipient, QuantumWrongPayer, QuantumUnderpaid, QuantumOverpaid, QuantumLate, QuantumTxFailed, QuantumTxNotFound, QuantumDuplicateTransfer:
+	case QuantumWrongChain, QuantumWrongToken, QuantumWrongContract, QuantumWrongOrder, QuantumWrongRecipient, QuantumWrongPayer, QuantumUnderpaid, QuantumOverpaid, QuantumLate, QuantumTxFailed, QuantumTxNotFound, QuantumDuplicateTransfer:
 		return true
 	default:
 		return false
@@ -82,13 +87,15 @@ func (f QuantumFailure) Valid() bool {
 }
 
 type QuantumConfig struct {
-	Enabled          bool   `json:"enabled"`
-	ChainID          uint64 `json:"chain_id"`
-	TokenAddress     string `json:"token_address"`
-	TokenSymbol      string `json:"token_symbol"`
-	TokenDecimals    int    `json:"token_decimals"`
-	ExplorerURL      string `json:"explorer_url"`
-	MinConfirmations int64  `json:"min_confirmations"`
+	// Nil keeps direct ERC-20 checkout for deployments without a payment contract.
+	PaymentContractAddress *string `json:"payment_contract_address"`
+	Enabled                bool    `json:"enabled"`
+	ChainID                uint64  `json:"chain_id"`
+	TokenAddress           string  `json:"token_address"`
+	TokenSymbol            string  `json:"token_symbol"`
+	TokenDecimals          int     `json:"token_decimals"`
+	ExplorerURL            string  `json:"explorer_url"`
+	MinConfirmations       int64   `json:"min_confirmations"`
 }
 type QuantumMerchant struct {
 	ID              string    `json:"id"`
@@ -107,32 +114,37 @@ type QuantumAttempt struct {
 	UpdatedAt     time.Time            `json:"updated_at"`
 }
 type QuantumInvoice struct {
-	ID              string               `json:"id"`
-	Description     string               `json:"description"`
-	AmountBaseUnits Amount               `json:"amount_base_units"`
-	ChainID         uint64               `json:"chain_id"`
-	TokenAddress    string               `json:"token_address"`
-	ReceiverAddress string               `json:"receiver_address"`
-	Status          QuantumInvoiceStatus `json:"status"`
-	CheckoutURL     string               `json:"checkout_url"`
-	ExpiresAt       time.Time            `json:"expires_at"`
-	PaidAt          *time.Time           `json:"paid_at"`
-	PaidTxHash      *string              `json:"paid_tx_hash"`
-	Attempts        []QuantumAttempt     `json:"attempts"`
-	CreatedAt       time.Time            `json:"created_at"`
+	OrderID string `json:"order_id"`
+	// Nil identifies a direct-transfer invoice; this snapshot never follows config changes.
+	PaymentContractAddress *string              `json:"payment_contract_address"`
+	ID                     string               `json:"id"`
+	Description            string               `json:"description"`
+	AmountBaseUnits        Amount               `json:"amount_base_units"`
+	ChainID                uint64               `json:"chain_id"`
+	TokenAddress           string               `json:"token_address"`
+	ReceiverAddress        string               `json:"receiver_address"`
+	Status                 QuantumInvoiceStatus `json:"status"`
+	CheckoutURL            string               `json:"checkout_url"`
+	ExpiresAt              time.Time            `json:"expires_at"`
+	PaidAt                 *time.Time           `json:"paid_at"`
+	PaidTxHash             *string              `json:"paid_tx_hash"`
+	Attempts               []QuantumAttempt     `json:"attempts"`
+	CreatedAt              time.Time            `json:"created_at"`
 }
 type QuantumCheckout struct {
-	MerchantName    string               `json:"merchant_name"`
-	Description     string               `json:"description"`
-	AmountBaseUnits Amount               `json:"amount_base_units"`
-	ChainID         uint64               `json:"chain_id"`
-	TokenAddress    string               `json:"token_address"`
-	TokenSymbol     string               `json:"token_symbol"`
-	TokenDecimals   int                  `json:"token_decimals"`
-	ReceiverAddress string               `json:"receiver_address"`
-	Status          QuantumInvoiceStatus `json:"status"`
-	ExpiresAt       time.Time            `json:"expires_at"`
-	ExplorerURL     string               `json:"explorer_url"`
+	OrderID                string               `json:"order_id"`
+	PaymentContractAddress *string              `json:"payment_contract_address"`
+	MerchantName           string               `json:"merchant_name"`
+	Description            string               `json:"description"`
+	AmountBaseUnits        Amount               `json:"amount_base_units"`
+	ChainID                uint64               `json:"chain_id"`
+	TokenAddress           string               `json:"token_address"`
+	TokenSymbol            string               `json:"token_symbol"`
+	TokenDecimals          int                  `json:"token_decimals"`
+	ReceiverAddress        string               `json:"receiver_address"`
+	Status                 QuantumInvoiceStatus `json:"status"`
+	ExpiresAt              time.Time            `json:"expires_at"`
+	ExplorerURL            string               `json:"explorer_url"`
 }
 type QuantumCheckoutStatus struct {
 	InvoiceStatus QuantumInvoiceStatus `json:"invoice_status"`
@@ -162,6 +174,14 @@ func ValidQuantumAddress(s string) bool {
 	return quantumAddress.MatchString(s) && s != "0x0000000000000000000000000000000000000000"
 }
 func ValidQuantumHash(s string) bool { return quantumHash.MatchString(s) }
+
+// QuantumOrderID matches keccak256(abi.encodePacked("paycore-quantum:", lowercaseUUID)).
+// Immutable invoice identity makes independent storage of this value unnecessary.
+func QuantumOrderID(invoiceID string) string {
+	h := sha3.NewLegacyKeccak256()
+	_, _ = h.Write([]byte("paycore-quantum:" + strings.ToLower(invoiceID))) // hash writes cannot fail
+	return "0x" + hex.EncodeToString(h.Sum(nil))
+}
 func (r *QuantumMerchantRequest) Normalize() error {
 	r.DisplayName = strings.TrimSpace(r.DisplayName)
 	r.ReceiverAddress = strings.ToLower(strings.TrimSpace(r.ReceiverAddress))
@@ -202,6 +222,7 @@ type QuantumTransfer struct {
 	Overflow bool
 }
 type QuantumReceipt struct {
+	Payments      []QuantumInvoicePaid
 	Found         bool
 	Canonical     bool
 	ChainID       uint64
@@ -214,6 +235,19 @@ type QuantumReceipt struct {
 	Confirmations int64
 	Transfers     []QuantumTransfer
 }
+
+// QuantumInvoicePaid carries a canonical ABI-decoded event; the service checks
+// its emitter and attribution against the immutable invoice snapshot.
+type QuantumInvoicePaid struct {
+	Contract string
+	OrderID  string
+	Payer    string
+	Merchant string
+	Amount   int64
+	Overflow bool
+	LogIndex uint64
+}
+
 type QuantumWork struct {
 	Invoice      QuantumInvoiceRecord
 	Attempt      QuantumAttempt

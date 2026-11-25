@@ -1,10 +1,56 @@
 ﻿# Quantum P0 API
 
-Backend implementation for `PayCore-Quantum`; the frontend is maintained separately by opencode. All payments are testnet-only, noncustodial, and separate from the existing accounting ledger. P0 does not send webhooks or implement agent mandates.
+Backend implementation for `PayCore-Quantum`. All payments are testnet-only,
+noncustodial, and separate from the existing accounting ledger. Quantum does not
+send webhooks or implement agent mandates.
+
+## Contract checkout integration
+
+Set optional `QUANTUM_PAYMENT_CONTRACT_ADDRESS` to the reviewed, deployed
+`QuantumPayments` address. Startup additionally requires contract bytecode and a
+canonical `token()` result matching `QUANTUM_TOKEN_ADDRESS`. A missing or mismatched
+contract disables Quantum; there is no silent fallback when configured.
+
+Config now exposes `payment_contract_address: string | null`. Invoice and checkout
+responses expose `order_id: string` (bytes32 hex) and
+`payment_contract_address: string | null`. Migration 029 persists the address on
+each invoice. The order ID is derived from the immutable lowercase invoice UUID:
+`keccak256(UTF8("paycore-quantum:" + invoiceUUID))`; it is not independently stored.
+Changing config affects new invoices only. Existing invoices with a null address
+continue using direct token transfers.
+
+Contract checkout reads allowance, requests approval for exactly the invoice
+amount if needed, waits for a successful approval receipt, checks allowance again,
+then registers an attempt immediately before calling
+`pay(order_id, receiver_address, amount_base_units)`. The approval hash is never
+submitted as payment proof. Wallet calls use legacy transactions. Approval does
+not extend invoice expiry. Status still comes only from the API.
+
+The verifier requires a canonical `InvoicePaid` log from the invoice's stored
+contract and checks order ID, payer, merchant, amount, direct transaction signer,
+transaction recipient, expiry and confirmations. Wrong/missing contract events or
+wrong invoice IDs enter review with `wrong_contract` or `wrong_order`. Malformed
+ABI logs are ignored. Token Transfer logs alone cannot settle a contract invoice.
+The existing atomic claim store reserves the `InvoicePaid` transaction/log index;
+existing reorg, audit and outbox behavior remains in use. Contract invoices are
+disambiguated by order ID, so identical payer/amount/receiver invoices may coexist.
+
+Only direct wallet `pay()` is integrated. Gasless relayers and mandate payment UX
+remain future work. If payment broadcast succeeds but hash submission fails, the
+open checkout page retains the hash and retries submission without sending another
+payment. Recovery after closing/reloading the page remains separate lost-hash work.
+No live deployment or wallet payment is established by these automated tests.
+
+The original P0 reference below describes direct-transfer invoices unless noted
+otherwise; public payloads also include the fields above.
 
 ## Configuration and readiness
 
-Copy the Quantum section from `api/.env.example` into local configuration. `QUANTUM_ENABLED` defaults to false. When enabled, all other variables below are required. Invalid configuration or failed startup RPC checks disable Quantum without preventing PayCore from starting.
+Copy the Quantum section from `api/.env.example` into local configuration.
+`QUANTUM_ENABLED` defaults to false. Network, token, confirmation and checkout
+settings are required when enabled; the payment contract is optional and the
+webhook key remains unused. Invalid configuration or failed startup RPC checks
+disable Quantum without preventing PayCore from starting.
 
 | Variable | Meaning |
 | --- | --- |
@@ -17,6 +63,7 @@ Copy the Quantum section from `api/.env.example` into local configuration. `QUAN
 | `QUANTUM_EXPLORER_URL` | Explorer base URL included in snapshots |
 | `QUANTUM_CHECKOUT_BASE_URL` | Frontend base URL used for immutable checkout links |
 | `QUANTUM_WEBHOOK_SIGNING_KEY` | Reserved, unused by P0; never commit a real key |
+| `QUANTUM_PAYMENT_CONTRACT_ADDRESS` | Optional reviewed deployment; blank selects direct transfer for new invoices |
 
 Verified against official documentation on 2026-11-22: QDay Aevum testnet chain `44005`, RPC `https://rpc-test.qday.info`, explorer `https://explorer-test.qday.info`, tUSD8 contract `0x456569838f1d43009a91eba4263147afd7233483`, six decimals. These are example configuration, not constants in application code. Reverify [chain parameters](https://wiki.qday.info/Knowledge/reference/chains), [tokens](https://wiki.qday.info/Knowledge/reference/tokens), and [faucet instructions](https://wiki.qday.info/guide/start/faucet) before a demonstration. Faucet gas claims require a user-controlled wallet; the backend never funds or signs transactions.
 

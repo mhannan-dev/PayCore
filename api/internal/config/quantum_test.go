@@ -16,6 +16,18 @@ func TestQuantumConfiguration(t *testing.T) {
 		}
 	}
 	env["QUANTUM_CHAIN_ID"] = "12345"
+	for _, address := range []string{"", "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "invalid", "0x0000000000000000000000000000000000000000", env["QUANTUM_TOKEN_ADDRESS"]} {
+		env["QUANTUM_PAYMENT_CONTRACT_ADDRESS"] = address
+		parsed, err := ParseQuantum(get)
+		valid := address == "" || address == "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+		if (err == nil) != valid {
+			t.Fatalf("contract %q: %v", address, err)
+		}
+		if err == nil && address != "" && (parsed.Public.PaymentContractAddress == nil || *parsed.Public.PaymentContractAddress != "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
+			t.Fatal("contract address was not normalized")
+		}
+	}
+	delete(env, "QUANTUM_PAYMENT_CONTRACT_ADDRESS")
 	for _, key := range []string{"QUANTUM_TOKEN_ADDRESS", "QUANTUM_TOKEN_DECIMALS", "QUANTUM_MIN_CONFIRMATIONS", "QUANTUM_RPC_URL"} {
 		old := env[key]
 		env[key] = "invalid"

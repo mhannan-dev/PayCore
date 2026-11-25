@@ -73,4 +73,26 @@ Expected: the attempt has an `underpaid` failure code and no explorer-driven suc
 
 *"PayCore Quantum demonstrates a noncustodial testnet checkout with explicit state, exact integer amounts, backend-authoritative confirmation and a clear review path for chain mismatches."*
 
+### Direct contract checkout
+
+1. Complete the [deployment handoff](../../contracts/DEPLOYMENT.md) using a
+   wallet-owner-signed transaction. Set `QUANTUM_PAYMENT_CONTRACT_ADDRESS` to that
+   reviewed address and restart the API; migration 029 is applied at startup.
+2. Create a new invoice. Confirm the API invoice and public checkout contain the
+   same `order_id` and `payment_contract_address`; older null-address invoices
+   intentionally retain their direct-transfer flow.
+3. Connect the payer wallet on the invoice network. If allowance is insufficient,
+   approve only the invoice amount. Explain that this first transaction is token
+   approval and does not settle the invoice.
+4. After approval confirms, sign the second wallet request for `pay`. With
+   sufficient existing allowance only this payment request is needed.
+5. Wait for the API to mark the invoice `PAID`. Open the actual payment transaction
+   in the explorer and inspect `InvoicePaid`: emitter, order ID, payer, merchant
+   and amount must match the invoice. Record its real hash and log index.
+6. If hash submission fails, keep checkout open and use **Retry verification
+   submission**. Do not sign another payment. Reload/closed-page recovery is
+   separate work; preserve the explorer link before leaving the page.
+
+No live deployment or payment is implied by this script or by local fixture tests.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the flow diagrams and [AGENT_MANDATE.md](AGENT_MANDATE.md) for the future agent-spending design proposal.

@@ -34,6 +34,17 @@ func TestQuantumAmounts(t *testing.T) {
 		t.Fatal("invalid precision accepted")
 	}
 }
+
+func TestQuantumOrderID(t *testing.T) {
+	// Independently generated with viem keccak256(toHex(...)); shared Solidity encoding.
+	const want = "0x797307cb894f69cc35dd9635045e83fb9989baaf0c6a900c0a0caf03324a0634"
+	if got := models.QuantumOrderID("11111111-1111-4111-8111-111111111111"); got != want {
+		t.Fatalf("order ID %s", got)
+	}
+	if models.QuantumOrderID("AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA") != models.QuantumOrderID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") {
+		t.Fatal("order IDs depend on UUID case")
+	}
+}
 func TestQuantumNormalizationAndEnums(t *testing.T) {
 	req := models.QuantumMerchantRequest{DisplayName: " Demo ", ReceiverAddress: "0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa"}
 	if err := req.Normalize(); err != nil || req.DisplayName != "Demo" || req.ReceiverAddress != "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {

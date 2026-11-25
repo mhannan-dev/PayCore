@@ -131,4 +131,22 @@ func TestQuantumRPCReceiptContext(t *testing.T) {
 	if !proof.Found || !proof.Canonical || proof.Confirmations != 2 || proof.TxSender != strings.ToLower(sender.Hex()) || len(proof.Transfers) != 1 || proof.Transfers[0].Amount != 1250000 {
 		t.Fatalf("proof: %+v", proof)
 	}
+	// Exercise InvoicePaid through the full receipt context validation, not only ABI decoding.
+	paid := &types.Log{Address: token, Topics: []common.Hash{crypto.Keccak256Hash([]byte("InvoicePaid(bytes32,address,address,uint256,bytes32)")), common.HexToHash(models.QuantumOrderID("11111111-1111-4111-8111-111111111111")), common.BytesToHash(sender.Bytes()), common.BytesToHash(receiver.Bytes())}, Data: append(common.LeftPadBytes(big.NewInt(1250000).Bytes(), 32), make([]byte, 32)...), Index: 1, BlockNumber: 20, TxHash: tx.Hash(), BlockHash: header.Hash()}
+	receipt.Logs = append(receipt.Logs, paid)
+	proof, err = client.Verify(context.Background(), tx.Hash().Hex())
+	if err != nil || len(proof.Payments) != 1 || proof.Payments[0].LogIndex != 1 {
+		t.Fatalf("contract receipt: %+v %v", proof, err)
+	}
+	paid.TxHash = common.Hash{}
+	proof, err = client.Verify(context.Background(), tx.Hash().Hex())
+	if err != nil || len(proof.Payments) != 0 {
+		t.Fatal("event with wrong transaction context accepted")
+	}
+	paid.TxHash = tx.Hash()
+	paid.Removed = true
+	proof, err = client.Verify(context.Background(), tx.Hash().Hex())
+	if err != nil || proof.Canonical || len(proof.Payments) != 0 {
+		t.Fatal("removed event accepted")
+	}
 }

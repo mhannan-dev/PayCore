@@ -46,6 +46,8 @@ export function attemptStatusTone(status: AttemptStatus): QuantumTone {
 
 export function failureCodeMessage(code: FailureCode): string {
   switch (code) {
+    case "wrong_contract": return "The transaction does not contain payment from this invoice's contract. Check the explorer and contact the merchant before paying again.";
+    case "wrong_order": return "The contract payment belongs to a different invoice. Contact the merchant before paying again.";
     case "wrong_chain": return "The payment was sent on a different network. Use the test network shown on this page.";
     case "wrong_token": return "The payment used a different token. Send only the token shown on this page.";
     case "wrong_recipient": return "The payment went to a different address. Send it to the receiver shown on this page.";

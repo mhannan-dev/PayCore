@@ -52,7 +52,7 @@ test("base-unit formatting and conversion stay string-based", () => {
 test("every contract enum has a plain-language label", () => {
   assert.deepEqual([...api.QUANTUM_INVOICE_STATUSES], ["PENDING", "PAID", "EXPIRED", "CANCELLED"]);
   assert.deepEqual([...api.QUANTUM_ATTEMPT_STATUSES], ["CREATED", "BROADCAST", "VERIFYING", "CONFIRMED", "FAILED", "REORGED", "REVIEW_REQUIRED"]);
-  assert.equal(api.QUANTUM_FAILURE_CODES.length, 10);
+  assert.equal(api.QUANTUM_FAILURE_CODES.length, 12);
   for (const status of api.QUANTUM_INVOICE_STATUSES) {
     assert.equal(typeof labels.invoiceStatusLabel(status), "string");
     assert.match(labels.invoiceStatusLabel(status), /\S/);

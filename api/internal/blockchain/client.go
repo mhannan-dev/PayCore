@@ -19,10 +19,11 @@ import (
 )
 
 type Client struct {
-	client   *ethclient.Client
-	chainID  uint64
-	token    common.Address
-	decimals int
+	paymentContract *common.Address
+	client          *ethclient.Client
+	chainID         uint64
+	token           common.Address
+	decimals        int
 }
 
 func Open(ctx context.Context, endpoint string, cfg models.QuantumConfig) (*Client, error) {
@@ -31,6 +32,10 @@ func Open(ctx context.Context, endpoint string, cfg models.QuantumConfig) (*Clie
 		return nil, errors.New("quantum RPC connection failed")
 	}
 	c := &Client{client: rpc, chainID: cfg.ChainID, token: common.HexToAddress(cfg.TokenAddress), decimals: cfg.TokenDecimals}
+	if cfg.PaymentContractAddress != nil {
+		address := common.HexToAddress(*cfg.PaymentContractAddress)
+		c.paymentContract = &address
+	}
 	if err := c.Validate(ctx); err != nil {
 		rpc.Close()
 		return nil, err
@@ -58,6 +63,16 @@ func (c *Client) Validate(ctx context.Context) error {
 	n := new(big.Int).SetBytes(result)
 	if !n.IsInt64() || n.Int64() != int64(c.decimals) {
 		return errors.New("quantum token decimals mismatch")
+	}
+	if c.paymentContract != nil {
+		code, err := c.client.CodeAt(ctx, *c.paymentContract, nil)
+		if err != nil || len(code) == 0 {
+			return errors.New("quantum payment contract unavailable")
+		}
+		result, err := c.client.CallContract(ctx, ethereum.CallMsg{To: c.paymentContract, Data: common.FromHex("0xfc0c546a")}, nil)
+		if err != nil || len(result) != 32 || new(big.Int).SetBytes(result[:12]).Sign() != 0 || common.BytesToAddress(result[12:]) != c.token {
+			return errors.New("quantum payment contract token mismatch")
+		}
 	}
 	return nil
 }
@@ -134,6 +149,9 @@ func (c *Client) Verify(ctx context.Context, hash string) (models.QuantumReceipt
 		}
 		if log.TxHash != receipt.TxHash || log.BlockHash != receipt.BlockHash || log.BlockNumber != proof.BlockNumber {
 			continue
+		}
+		if event, ok := decodeInvoicePaid(log); ok {
+			proof.Payments = append(proof.Payments, event)
 		}
 		if log.Address != c.token || len(log.Topics) != 3 || log.Topics[0] != transferTopic || len(log.Data) != 32 || uint64(log.Index) > math.MaxInt64 {
 			continue

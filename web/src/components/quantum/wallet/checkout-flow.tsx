@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { isAddress } from "viem";
-import { useConnect, useConnection, useDisconnect, useSwitchChain, useWriteContract } from "wagmi";
+import { useEffect, useRef, useState } from "react";
+import { type Hash } from "viem";
+import { useConnect, useConnection, useDisconnect, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { AuthApiError } from "@/lib/auth-api";
 import { createCheckoutAttempt, explorerTxUrl, fetchCheckoutStatus, submitCheckoutTx, type Checkout, type CheckoutStatus } from "@/lib/quantum-api";
-import { baseUnitsToBigInt, formatTokenAmount } from "@/lib/quantum-amount";
+import { formatTokenAmount } from "@/lib/quantum-amount";
+import { QUANTUM_PAYMENTS_ABI, QUANTUM_TOKEN_ABI, sendCheckoutPayment } from "@/lib/quantum-payment";
 import { attemptStatusLabel, failureCodeMessage } from "@/lib/quantum-labels";
 import { Notice } from "../../ui";
-
-const TRANSFER_ABI = [
-  { type: "function", name: "transfer", stateMutability: "nonpayable", inputs: [{ name: "to", type: "address" }, { name: "value", type: "uint256" }], outputs: [{ type: "bool" }] },
-] as const;
 
 type Props = { token: string; checkout: Checkout; minConfirmations: number; onStatusChange: (status: CheckoutStatus) => void };
 
@@ -43,6 +40,9 @@ export function CheckoutFlow({ token, checkout, minConfirmations, onStatusChange
   const { disconnect } = useDisconnect();
   const { switchChainAsync, isPending: switching } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient({ chainId: checkout.chain_id });
+  const sending = useRef(false);
+  const [broadcast, setBroadcast] = useState<{ attemptId: string; hash: Hash } | null>(null);
   const [status, setStatus] = useState<CheckoutStatus | null>(null);
   const [statusError, setStatusError] = useState("");
   const [error, setError] = useState("");
@@ -80,7 +80,8 @@ export function CheckoutFlow({ token, checkout, minConfirmations, onStatusChange
   const address = connection.status === "connected" ? connection.address : undefined;
   const connectedChain = connection.status === "connected" ? connection.chainId : undefined;
   const wrongNetwork = connection.status === "connected" && connectedChain !== checkout.chain_id;
-  const cannotPay = closed || latest?.status === "REVIEW_REQUIRED" || wrongNetwork || !address || busy;
+  const inFlight = latest?.status === "BROADCAST" || latest?.status === "VERIFYING" || latest?.status === "REORGED";
+  const cannotPay = closed || latest?.status === "REVIEW_REQUIRED" || inFlight || (started && !paused) || wrongNetwork || !address || busy || broadcast !== null;
   const paid = status?.invoice_status === "PAID";
   const paidHash = status?.paid_tx_hash ?? null;
 
@@ -108,37 +109,67 @@ export function CheckoutFlow({ token, checkout, minConfirmations, onStatusChange
   }
 
   async function pay() {
-    if (busy || !address || cannotPay) return;
-    if (!isAddress(checkout.token_address, { strict: false }) || !isAddress(checkout.receiver_address, { strict: false })) {
-      setError("This invoice has invalid payment details. Contact the merchant.");
+    if (sending.current || !address || cannotPay) return;
+    if (!publicClient) {
+      setError("Your wallet is not ready. Reconnect and try again.");
       return;
     }
+    sending.current = true;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const amount = baseUnitsToBigInt(checkout.amount_base_units);
-      const intent = await createCheckoutAttempt(token, { payer_address: address.toLowerCase() });
-      setMessage("Intent registered. Confirm the transfer in your wallet.");
-      const hash = await writeContractAsync({
-        address: checkout.token_address,
-        abi: TRANSFER_ABI,
-        functionName: "transfer",
-        args: [checkout.receiver_address, amount],
-        chainId: checkout.chain_id,
-      });
-      setMessage("Transfer broadcast. Waiting for the API to verify it…");
-      await submitCheckoutTx(token, intent.id, { tx_hash: hash.toLowerCase() });
+      const payment = await sendCheckoutPayment(checkout, {
+        allowance: async ({ token: tokenAddress, contract }) => publicClient.readContract({ address: tokenAddress, abi: QUANTUM_TOKEN_ABI, functionName: "allowance", args: [address, contract] }),
+        approve: async ({ token: tokenAddress, contract, amount }) => writeContractAsync({ address: tokenAddress, abi: QUANTUM_TOKEN_ABI, functionName: "approve", args: [contract, amount], account: address, chainId: checkout.chain_id, type: "legacy" }),
+        waitForApproval: async (hash) => {
+          const receipt = await publicClient.waitForTransactionReceipt({ hash, confirmations: 1, timeout: 120000 });
+          if (receipt.status !== "success") throw new Error("Token approval failed. No payment was sent.");
+        },
+        register: async () => {
+          if (await publicClient.getChainId() !== checkout.chain_id) throw new Error("Switch back to the invoice test network before paying.");
+          return (await createCheckoutAttempt(token, { payer_address: address.toLowerCase() })).id;
+        },
+        pay: async ({ contract, orderId, merchant, amount }) => writeContractAsync({ address: contract, abi: QUANTUM_PAYMENTS_ABI, functionName: "pay", args: [orderId, merchant, amount], account: address, chainId: checkout.chain_id, type: "legacy" }),
+        transfer: async ({ token: tokenAddress, merchant, amount }) => writeContractAsync({ address: tokenAddress, abi: QUANTUM_TOKEN_ABI, functionName: "transfer", args: [merchant, amount], account: address, chainId: checkout.chain_id, type: "legacy" }),
+      }, setMessage);
+      setBroadcast(payment);
+      setMessage("Payment broadcast. Waiting for the API to verify it…");
+      await submitCheckoutTx(token, payment.attemptId, { tx_hash: payment.hash.toLowerCase() });
+      setBroadcast(null);
       setStarted(true);
       setMessage("Transaction submitted. Waiting for testnet confirmations…");
     } catch (reason) {
       if (reason instanceof AuthApiError && reason.code === "tx_already_submitted") {
+        setBroadcast(null);
         setStarted(true);
         setMessage("This transaction was already registered. Waiting for verification…");
         return;
       }
       setError(describeError(reason));
     } finally {
+      sending.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function retrySubmission() {
+    if (!broadcast || sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await submitCheckoutTx(token, broadcast.attemptId, { tx_hash: broadcast.hash.toLowerCase() });
+      setBroadcast(null);
+      setStarted(true);
+      setMessage("Transaction submitted. Waiting for testnet confirmations…");
+    } catch (reason) {
+      if (reason instanceof AuthApiError && reason.code === "tx_already_submitted") {
+        setBroadcast(null);
+        setStarted(true);
+      } else setError(describeError(reason));
+    } finally {
+      sending.current = false;
       setBusy(false);
     }
   }
@@ -169,11 +200,12 @@ export function CheckoutFlow({ token, checkout, minConfirmations, onStatusChange
       <p className="quantum-status" role="status" aria-live="polite">{statusText}</p>
       {statusError && <p className="muted" role="status">{statusError}</p>}
       {error && <p className="error-message" role="alert">{error}</p>}
+      {broadcast && !paid && <Notice icon="shield">Payment was broadcast. Keep this page open and retry verification submission; do not pay again. <a className="text-link" href={explorerTxUrl(checkout.explorer_url, broadcast.hash)} target="_blank" rel="noreferrer">View transaction</a><button type="button" className="button secondary" disabled={busy} onClick={() => void retrySubmission()}>Retry verification submission</button></Notice>}
       {!paid && !closed && latest?.status !== "REVIEW_REQUIRED" && <>
         <button type="button" className="button primary quantum-pay" disabled={cannotPay} onClick={() => void pay()}>
           {busy ? "Sending…" : `Pay ${formatTokenAmount(checkout.amount_base_units, checkout.token_decimals)} ${checkout.token_symbol}`}
         </button>
-        <p className="quantum-field-hint">Approve the transfer in your wallet. Success is shown only after the API verifies payment.</p>
+        <p className="quantum-field-hint">{checkout.payment_contract_address === null ? "Confirm the transfer in your wallet." : "Approve the invoice amount if requested, then confirm payment in your wallet. Token approval alone does not pay the invoice."} Success is shown only after the API verifies payment.</p>
       </>}
       {latest && <div className="quantum-attempt-status">
         <strong>{attemptStatusLabel(latest.status)}</strong>

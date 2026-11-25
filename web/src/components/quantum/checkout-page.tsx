@@ -54,8 +54,9 @@ export function CheckoutPage({ token }: Props) {
             <span><strong>Network</strong> Testnet {checkout.chain_id}</span>
             <span><strong>Expires</strong> {new Date(checkout.expires_at).toLocaleString()}</span>
             <span className="quantum-break"><strong>Receiver</strong> <span className="mono">{checkout.receiver_address}</span></span>
+            {checkout.payment_contract_address && <span className="quantum-break"><strong>Payment contract</strong> <a className="text-link mono" href={`${checkout.explorer_url.replace(/\/+$/, "")}/address/${encodeURIComponent(checkout.payment_contract_address)}`} target="_blank" rel="noreferrer">{checkout.payment_contract_address}</a></span>}
           </div>
-          {config?.enabled ? <QuantumWalletProvider config={config}>
+          {config?.enabled ? <QuantumWalletProvider key={checkout.chain_id} config={{ ...config, chain_id: checkout.chain_id }}>
             <CheckoutFlow token={token} checkout={checkout} minConfirmations={config.min_confirmations} onStatusChange={handleStatusChange} />
           </QuantumWalletProvider> : <p className="error-message" role="alert">Quantum payments are unavailable on this server. Contact the merchant.</p>}
         </>}

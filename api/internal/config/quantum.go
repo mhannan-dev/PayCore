@@ -49,6 +49,13 @@ func ParseQuantum(get func(string) string) (QuantumConfig, error) {
 	if !models.ValidQuantumAddress(token) {
 		return c, errors.New("invalid QUANTUM_TOKEN_ADDRESS")
 	}
+	var paymentContract *string
+	if address := strings.ToLower(strings.TrimSpace(get("QUANTUM_PAYMENT_CONTRACT_ADDRESS"))); address != "" {
+		if !models.ValidQuantumAddress(address) || address == token {
+			return c, errors.New("invalid QUANTUM_PAYMENT_CONTRACT_ADDRESS")
+		}
+		paymentContract = &address
+	}
 	rpc := strings.TrimSpace(get("QUANTUM_RPC_URL"))
 	explorer := strings.TrimRight(strings.TrimSpace(get("QUANTUM_EXPLORER_URL")), "/")
 	checkout := strings.TrimRight(strings.TrimSpace(get("QUANTUM_CHECKOUT_BASE_URL")), "/")
@@ -59,5 +66,6 @@ func ParseQuantum(get func(string) string) (QuantumConfig, error) {
 		}
 	}
 	c = QuantumConfig{Public: models.QuantumConfig{Enabled: true, ChainID: chain, TokenAddress: token, TokenSymbol: "tUSD8", TokenDecimals: decimals, ExplorerURL: explorer, MinConfirmations: confirmations}, RPCURL: rpc, CheckoutBaseURL: checkout}
+	c.Public.PaymentContractAddress = paymentContract
 	return c, nil
 }

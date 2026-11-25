@@ -151,4 +151,10 @@ The console uses the existing authenticated `useApi`, RBAC and pagination primit
 - Backend checks and worker configuration are documented in [API.md](API.md) and [SECURITY.md](SECURITY.md).
 - For the click-through script, see [DEMO.md](DEMO.md). For the future agent-spending design, see [AGENT_MANDATE.md](AGENT_MANDATE.md).
 
-Part D adds a separate, noncustodial smart-contract checkout and mandate implementation under `contracts/`; it is not wired into the P0 API or browser flow. See [CONTRACTS.md](CONTRACTS.md) for the contract design, Shanghai/Aevum verification, tests, gas report and deployment procedure.
+The noncustodial contract under `contracts/` is integrated into direct wallet
+checkout through optional `QUANTUM_PAYMENT_CONTRACT_ADDRESS`. Each invoice stores
+its contract snapshot; the API derives its bytes32 order ID and verifies the
+corresponding `InvoicePaid` event. Legacy invoices retain direct-transfer behavior.
+See [API.md](API.md#contract-checkout-integration) for the flow and [CONTRACTS.md](CONTRACTS.md)
+for contract design, tests and deployment. Mandate and relayer product flows remain
+unimplemented.
