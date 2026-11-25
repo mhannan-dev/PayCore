@@ -3,6 +3,7 @@ githubCopilot:
   cloudAgent: false
 
 context: |
+  FEATURE FREEZE until the hackathon submission (2026-12-11 08:00 UTC): PAYCORE_QUANTUM_SCOPE_LOCK.md overrides every other document, including PAYCORE_QUANTUM_CODEX_PROMPT.md. Do not propose or apply a change unless it implements a work item listed in its section 2 (A1-A3, F1-F4, C1-C2, D1-D7) or is a critical bug fix; name that item ID in the proposal. Decline other proposals and point to the scope lock's change-control section.
   Follow AGENTS.md and docs/coding_rules.md; also read directory-specific instructions for affected code.
   Before feature implementation, document observable behavior, edge cases, persistence, API contracts, and validation using openspec/README.md.
   Read the affected source, migrations, DTOs, and tests before describing the current baseline; distinguish implemented behavior from proposals and dated verification evidence.
@@ -12,6 +13,7 @@ context: |
 
 rules:
   proposal:
+    - During the feature freeze, start by naming the PAYCORE_QUANTUM_SCOPE_LOCK.md work item ID (or "critical bug fix" with the failure it fixes). A proposal without one is out of scope.
     - State the user problem, intended observable outcome, scope, non-goals, affected capabilities, and compatibility impact.
     - Identify affected source/docs and distinguish verified baseline facts, assumptions, and unresolved decisions. Do not present a future feature or old test result as current implementation evidence.
     - Identify which edge cases, database changes, API changes, and validation rules need design; explicitly justify any area that is not applicable.

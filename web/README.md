@@ -43,7 +43,6 @@ Page access is decided by `ROUTE_PERMISSIONS` in `src/lib/rbac.ts`; it controls 
 - `src/lib/auth-api.ts`: typed API client; the TypeScript mirror of the Go API contract.
 - `src/lib/auth-session.ts`: browser session store (token and user, refreshed from `/auth/me`).
 - `src/lib/rbac.ts`: permission codes and route permissions.
-- `src/lib/demo-data.ts`: sample ledger fixtures with `bigint` balance helpers.
 
 ## Checks
 

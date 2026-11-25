@@ -1,5 +1,7 @@
 # PayCore Quantum P0: task assignment for Codex and opencode
 
+> **⛔ FEATURE FREEZE since 2026-11-25. Read [PAYCORE_QUANTUM_SCOPE_LOCK.md](PAYCORE_QUANTUM_SCOPE_LOCK.md) first.** It overrides this file. Only work items listed there (A1–A3, F1–F4, C1–C2, D1–D7) may be done. Every commit message names its item ID. Anything else in this file that is not on that list, such as P1 webhooks, mandate UI or a relayer, is **out of scope** until after submission.
+
 Two agents work in parallel on the existing branch `PayCore-Quantum`:
 
 | Agent | Owns | Section |
