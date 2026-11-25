@@ -20,8 +20,36 @@ PayCore is a learning-grade but production-minded fintech core: an append-only d
 
 ![PayCore operations console: overview](docs/previews/web-overview.png)
 
+## Hackathon reviewers: start here
+
+**PayCore Quantum** is our entry for the QDay **Aevum Builder Challenge #1**: a noncustodial tUSD8 invoice checkout on the Aevum testnet (chain 44005). The payer pays from their own wallet; PayCore marks an invoice **PAID** only after its backend has checked the payment on-chain. An on-chain **Agent Spend Mandate** lets an AI agent pay invoices only within caps, an allowlist and an expiry that the owner can revoke instantly.
+
+> **TESTNET ONLY.** tUSD8 has no real value. PayCore never holds keys or funds.
+
+| What | Where |
+| --- | --- |
+| Demo video | `<link after recording>` |
+| Live demo / Docker package | `<link after deployment>`, or run it locally: [Getting started](#getting-started), then [PayCore Quantum](#paycore-quantum-testnet) |
+| `QuantumPayments` contract on Aevum | `<address after deploy>`. Deploy tx, exact commit and explorer links: [docs/quantum/CONTRACTS.md](docs/quantum/CONTRACTS.md) |
+| Example transactions (direct, contract, agent, revoke) | `<tx hashes with explorer links after the live run>` |
+| 3–5 minute demo script | [docs/quantum/DEMO.md](docs/quantum/DEMO.md) |
+| Eligibility and provenance (pre-existing vs. challenge-period code) | [docs/quantum/ELIGIBILITY.md](docs/quantum/ELIGIBILITY.md): **not yet confirmed by the organizers** |
+
+**Built for the challenge** (Quantum code is newly written; see the eligibility file for the provenance of everything else):
+
+| Part | Code | Docs |
+| --- | --- | --- |
+| Smart contract: invoice payment (direct and EIP-3009), agent mandates with caps, expiry, revoke and human approval | [contracts/](contracts/) (Foundry: unit, fuzz, invariant and Aevum fork tests) | [CONTRACTS.md](docs/quantum/CONTRACTS.md), [AGENT_MANDATE.md](docs/quantum/AGENT_MANDATE.md) |
+| On-chain verifier: receipt, `InvoicePaid` event, exact amount, confirmations, duplicate-claim and reorg handling | [api/internal/blockchain/](api/internal/blockchain/), `api/internal/services/quantum*.go`, `api/internal/repositories/quantum*.go`, migrations `025`+ | [ARCHITECTURE.md](docs/quantum/ARCHITECTURE.md), [SECURITY.md](docs/quantum/SECURITY.md) |
+| Merchant console and public wallet checkout | [web/src/components/quantum/](web/src/components/quantum/), `web/src/app/quantum`, `web/src/app/pay/[token]` | [API.md](docs/quantum/API.md), [user guide §4](docs/user_guide.md) |
+
+**Foundation it runs on** (PayCore platform, not judged as new work): sign-in, RBAC, MFA, the idempotency store, the transactional outbox and the audit log. The double-entry ledger, reconciliation and settlement modules are part of the same repository but are **not** part of the challenge flow.
+
+Scope and status for the submission are tracked in [PAYCORE_QUANTUM_SCOPE_LOCK.md](PAYCORE_QUANTUM_SCOPE_LOCK.md); every claim above that still shows a `<placeholder>` is not yet done.
+
 ## Contents
 
+- [Hackathon reviewers: start here](#hackathon-reviewers-start-here)
 - [Project status](#project-status)
 - [Features](#features)
 - [Architecture](#architecture)
